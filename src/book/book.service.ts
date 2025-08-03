@@ -1,0 +1,59 @@
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../database/prisma.service';
+import { CreateBookDto } from './dto/create-book.dto';
+import { UpdateBookDto } from './dto/update-book.dto';
+
+@Injectable()
+export class BookService {
+  constructor(private prisma: PrismaService) {}
+
+  async create(createBookDto: CreateBookDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: createBookDto.userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`User not found`);
+    }
+
+    return this.prisma.book.create({
+      data: {
+        name: createBookDto.name,
+        userId: createBookDto.userId,
+      },
+    });
+  }
+
+  async findAllByUser(userId: string) {
+    return this.prisma.book.findMany({
+      where: { userId },
+      include: { transactions: true },
+    });
+  }
+
+  async findOne(id: string) {
+    const book = await this.prisma.book.findUnique({
+      where: { id },
+      include: { transactions: true },
+    });
+    if (!book) {
+      throw new NotFoundException(`Book with id ${id} not found`);
+    }
+    return book;
+  }
+
+  async update(id: string, updateBookDto: UpdateBookDto) {
+    await this.findOne(id);
+    return this.prisma.book.update({
+      where: { id },
+      data: updateBookDto,
+    });
+  }
+
+  async remove(id: string) {
+    await this.findOne(id);
+    return this.prisma.book.delete({
+      where: { id },
+    });
+  }
+}

@@ -1,7 +1,14 @@
 model User {
   id            String         @id @default(uuid())
+  firstName     String
+  lastName      String
+  profilePic    String?
+  address       String?
+  phoneNumber   String?
   email         String         @unique
   password      String
+  country       String?
+  books         Book[]
   refreshTokens RefreshToken[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
