@@ -1,0 +1,7 @@
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  token     String
+  expiresAt DateTime
+}
