@@ -25,6 +25,7 @@ export class BookService {
   }
 
   async findAllByUser(userId: string) {
+    console.log('userId', userId);
     return this.prisma.book.findMany({
       where: { userId },
       include: { transactions: true },

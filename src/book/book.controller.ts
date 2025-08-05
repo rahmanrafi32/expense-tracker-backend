@@ -7,12 +7,15 @@ import {
   Patch,
   Delete,
   Query,
+  UseGuards,
+  Request,
 } from '@nestjs/common';
 import { BookService } from './book.service';
 import { CreateBookDto } from './dto/create-book.dto';
 import { UpdateBookDto } from './dto/update-book.dto';
-
+import { AuthGuard } from '@nestjs/passport';
 @Controller('books')
+@UseGuards(AuthGuard('jwt'))
 export class BookController {
   constructor(private readonly bookService: BookService) {}
 

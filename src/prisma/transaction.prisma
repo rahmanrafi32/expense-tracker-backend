@@ -1,0 +1,19 @@
+model Transaction {
+  id              String          @id @default(uuid())
+  bookId          String
+  book            Book            @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  type            TransactionType
+  date            DateTime
+  remark          String?
+  categoryId      String
+  category        Category        @relation(fields: [categoryId], references: [id])
+  paymentMethodId String
+  paymentMethod   PaymentMethod   @relation(fields: [paymentMethodId], references: [id])
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+}
+
+enum TransactionType {
+  CASH_IN
+  CASH_OUT
+}

@@ -4,4 +4,6 @@ export class UpdateBookDto {
   @IsOptional()
   @IsString()
   name?: string;
+
+  transactionAmount: number;
 }

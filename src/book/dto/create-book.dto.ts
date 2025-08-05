@@ -9,4 +9,6 @@ export class CreateBookDto {
   @IsNotEmpty({ message: 'User ID is required' })
   @IsUUID('4', { message: 'User ID must be a valid UUID' })
   userId: string;
+
+  transactionAmount: number;
 }
