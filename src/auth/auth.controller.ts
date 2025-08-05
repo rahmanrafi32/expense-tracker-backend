@@ -8,7 +8,8 @@ import {
 import { AuthService } from './auth.service';
 import { CreateUserDto } from '../user/dto/create-user.dto';
 import { AuthGuard } from '@nestjs/passport';
-import { CommonResponse } from '../common/dto/common-response.dto';
+import { CommonResponse } from '../common';
+import * as types from '../common';
 
 @Controller('auth')
 export class AuthController {
@@ -16,9 +17,9 @@ export class AuthController {
 
   @Post('login')
   async login(
-    @Body() body: { email: string; password: string },
+    @Body() body: types.UserLoginCredentials,
   ): Promise<CommonResponse> {
-    const user: { email: string; id: string } | null =
+    const user: types.UserValidationResult | null =
       await this.authService.validateUser(body.email, body.password);
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');

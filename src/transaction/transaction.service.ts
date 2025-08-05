@@ -6,6 +6,16 @@ import {
 import { PrismaService } from '../database/prisma.service';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
+import { Prisma, Transaction } from '@prisma/client';
+
+type TransactionUpdateData = {
+  type?: 'CASH_IN' | 'CASH_OUT';
+  remark?: string;
+  date?: Date;
+  amount?: number;
+  categoryId?: string;
+  paymentMethodId?: string;
+};
 
 @Injectable()
 export class TransactionService {
@@ -19,6 +29,14 @@ export class TransactionService {
 
     if (!bookExists) {
       throw new NotFoundException(`Book not found`);
+    }
+
+    // Validate amount
+    if (
+      createTransactionDto.amount !== undefined &&
+      createTransactionDto.amount < 0
+    ) {
+      throw new BadRequestException('Amount cannot be negative');
     }
 
     let category = await this.prisma.category.findFirst({
@@ -54,51 +72,71 @@ export class TransactionService {
     }
 
     try {
-      return await this.prisma.transaction.create({
-        data: {
-          bookId: createTransactionDto.bookId,
-          type: createTransactionDto.type,
-          date: new Date(createTransactionDto.date),
-          remark: createTransactionDto.remark,
-          categoryId: category.id,
-          paymentMethodId: paymentMethod.id,
-        },
-        include: {
-          book: {
-            select: {
-              name: true,
-              user: {
+      return await this.prisma.$transaction(
+        async (tx: Prisma.TransactionClient) => {
+          const newTransaction = await tx.transaction.create({
+            data: {
+              bookId: createTransactionDto.bookId,
+              type: createTransactionDto.type,
+              date: new Date(createTransactionDto.date),
+              amount: createTransactionDto.amount || 0.0,
+              remark: createTransactionDto.remark,
+              categoryId: category.id,
+              paymentMethodId: paymentMethod.id,
+            },
+            include: {
+              book: {
+                select: {
+                  name: true,
+                  user: {
+                    select: {
+                      id: true,
+                      firstName: true,
+                      lastName: true,
+                    },
+                  },
+                },
+              },
+              category: {
                 select: {
                   id: true,
-                  firstName: true,
-                  lastName: true,
+                  name: true,
+                },
+              },
+              paymentMethod: {
+                select: {
+                  id: true,
+                  name: true,
                 },
               },
             },
-          },
-          category: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-          paymentMethod: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
+          });
+
+          // Update book balance
+          await this.updateBookBalance(tx, createTransactionDto.bookId);
+
+          return newTransaction;
         },
-      });
+      );
     } catch (error) {
-      if (error.code === 'P2003') {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2003'
+      ) {
         throw new BadRequestException('Invalid book ID provided');
       }
       throw error;
     }
   }
 
-  async findAllByBook(bookId: string) {
+  async findAllByBook(bookId: string): Promise<
+    Prisma.TransactionGetPayload<{
+      include: {
+        category: { select: { id: true; name: true } };
+        paymentMethod: { select: { id: true; name: true } };
+      };
+    }>[]
+  > {
     return this.prisma.transaction.findMany({
       where: { bookId },
       orderBy: { date: 'desc' },
@@ -119,7 +157,14 @@ export class TransactionService {
     });
   }
 
-  async findOne(id: string) {
+  async findOne(id: string): Promise<
+    Prisma.TransactionGetPayload<{
+      include: {
+        category: { select: { id: true; name: true } };
+        paymentMethod: { select: { id: true; name: true } };
+      };
+    }>
+  > {
     const transaction = await this.prisma.transaction.findUnique({
       where: { id },
       include: {
@@ -153,12 +198,20 @@ export class TransactionService {
       throw new NotFoundException(`Transaction with id ${id} not found`);
     }
 
-    const updateData: any = {
+    if (
+      updateTransactionDto.amount !== undefined &&
+      updateTransactionDto.amount < 0
+    ) {
+      throw new BadRequestException('Amount cannot be negative');
+    }
+
+    const updateData: TransactionUpdateData = {
       type: updateTransactionDto.type,
       remark: updateTransactionDto.remark,
       date: updateTransactionDto.date
         ? new Date(updateTransactionDto.date)
         : undefined,
+      amount: updateTransactionDto.amount,
     };
 
     // Handle category update
@@ -209,30 +262,96 @@ export class TransactionService {
       updateData.paymentMethodId = paymentMethod.id;
     }
 
-    return this.prisma.transaction.update({
-      where: { id },
-      data: updateData,
-      include: {
-        category: {
-          select: {
-            id: true,
-            name: true,
+    return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const updatedTransaction = await tx.transaction.update({
+        where: { id },
+        data: updateData,
+        include: {
+          category: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          paymentMethod: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          book: {
+            select: {
+              name: true,
+              user: {
+                select: {
+                  id: true,
+                  firstName: true,
+                  lastName: true,
+                },
+              },
+            },
           },
         },
-        paymentMethod: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
+      });
+      await this.updateBookBalance(tx, existingTransaction.bookId);
+
+      return updatedTransaction;
+    });
+  }
+
+  async remove(id: string): Promise<Transaction> {
+    const transaction = await this.findOne(id);
+    return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const deletedTransaction = await tx.transaction.delete({
+        where: { id },
+      });
+      await this.updateBookBalance(tx, transaction.bookId);
+      return deletedTransaction;
+    });
+  }
+
+  private async updateBookBalance(
+    tx: Prisma.TransactionClient,
+    bookId: string,
+  ): Promise<void> {
+    const { balance } = await this.getBookBalanceWithTx(tx, bookId);
+
+    // Update the book's total amount and updatedAt timestamp
+    await tx.book.update({
+      where: { id: bookId },
+      data: {
+        bookTotalAmount: balance,
+        updatedAt: new Date(),
       },
     });
   }
 
-  async remove(id: string) {
-    await this.findOne(id);
-    return this.prisma.transaction.delete({
-      where: { id },
+  private async getBookBalanceWithTx(
+    tx: Prisma.TransactionClient,
+    bookId: string,
+  ): Promise<{ balance: number; totalCashIn: number; totalCashOut: number }> {
+    const transactions = await tx.transaction.findMany({
+      where: { bookId },
+      select: {
+        amount: true,
+        type: true,
+      },
     });
+
+    const totalCashIn = transactions
+      .filter((t) => t.type === 'CASH_IN')
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    const totalCashOut = transactions
+      .filter((t) => t.type === 'CASH_OUT')
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    const balance = totalCashIn - totalCashOut;
+
+    return {
+      balance,
+      totalCashIn,
+      totalCashOut,
+    };
   }
 }

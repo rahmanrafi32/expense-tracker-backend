@@ -13,22 +13,7 @@ import { PaymentMethodService } from './payment-method.service';
 import { CreatePaymentMethodDto } from './dto/create-payment-method.dto';
 import { UpdatePaymentMethodDto } from './dto/update-payment-method.dto';
 import { AuthGuard } from '@nestjs/passport';
-
-interface AuthenticatedRequest extends Request {
-  user: {
-    userId: string;
-    email: string;
-  };
-}
-
-interface PaymentMethod {
-  id: string;
-  name: string;
-  isDefault: boolean;
-  userId: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-}
+import * as types from '../common';
 
 @Controller('payment-methods')
 @UseGuards(AuthGuard('jwt'))
@@ -37,15 +22,15 @@ export class PaymentMethodController {
 
   @Get()
   async getPaymentMethodsForUser(
-    @Request() req: AuthenticatedRequest,
-  ): Promise<PaymentMethod[]> {
+    @Request() req: types.AuthenticatedRequest,
+  ): Promise<types.PaymentMethod[]> {
     return this.paymentMethodService.getPaymentMethodsForUser(req.user.userId);
   }
 
   @Get('user-specific')
   async getUserSpecificPaymentMethods(
-    @Request() req: AuthenticatedRequest,
-  ): Promise<PaymentMethod[]> {
+    @Request() req: types.AuthenticatedRequest,
+  ): Promise<types.PaymentMethod[]> {
     return this.paymentMethodService.getUserSpecificPaymentMethods(
       req.user.userId,
     );
@@ -53,9 +38,9 @@ export class PaymentMethodController {
 
   @Post()
   async createUserPaymentMethod(
-    @Request() req: AuthenticatedRequest,
+    @Request() req: types.AuthenticatedRequest,
     @Body() createPaymentMethodDto: CreatePaymentMethodDto,
-  ): Promise<PaymentMethod> {
+  ): Promise<types.PaymentMethod> {
     return this.paymentMethodService.createUserPaymentMethod(
       req.user.userId,
       createPaymentMethodDto,
@@ -64,10 +49,10 @@ export class PaymentMethodController {
 
   @Put(':id')
   async updateUserPaymentMethod(
-    @Request() req: AuthenticatedRequest,
+    @Request() req: types.AuthenticatedRequest,
     @Param('id') paymentMethodId: string,
     @Body() updateData: UpdatePaymentMethodDto,
-  ): Promise<PaymentMethod> {
+  ): Promise<types.PaymentMethod> {
     return this.paymentMethodService.updateUserPaymentMethod(
       req.user.userId,
       paymentMethodId,
@@ -77,9 +62,9 @@ export class PaymentMethodController {
 
   @Delete(':id')
   async deleteUserPaymentMethod(
-    @Request() req: AuthenticatedRequest,
+    @Request() req: types.AuthenticatedRequest,
     @Param('id') paymentMethodId: string,
-  ): Promise<PaymentMethod> {
+  ): Promise<types.PaymentMethod> {
     return this.paymentMethodService.deleteUserPaymentMethod(
       req.user.userId,
       paymentMethodId,

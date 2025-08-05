@@ -13,22 +13,7 @@ import { CategoryService } from './category.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { AuthGuard } from '@nestjs/passport';
-
-interface AuthenticatedRequest extends Request {
-  user: {
-    userId: string;
-    email: string;
-  };
-}
-
-interface Category {
-  id: string;
-  name: string;
-  isDefault: boolean;
-  userId: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-}
+import * as types from '../common';
 
 @Controller('categories')
 @UseGuards(AuthGuard('jwt'))
@@ -37,23 +22,23 @@ export class CategoryController {
 
   @Get()
   async getCategoriesForUser(
-    @Request() req: AuthenticatedRequest,
-  ): Promise<Category[]> {
+    @Request() req: types.AuthenticatedRequest,
+  ): Promise<types.Category[]> {
     return this.categoryService.getCategoriesForUser(req.user.userId);
   }
 
   @Get('user-specific')
   async getUserSpecificCategories(
-    @Request() req: AuthenticatedRequest,
-  ): Promise<Category[]> {
+    @Request() req: types.AuthenticatedRequest,
+  ): Promise<types.Category[]> {
     return this.categoryService.getUserSpecificCategories(req.user.userId);
   }
 
   @Post()
   async createUserCategory(
-    @Request() req: AuthenticatedRequest,
+    @Request() req: types.AuthenticatedRequest,
     @Body() createCategoryDto: CreateCategoryDto,
-  ): Promise<Category> {
+  ): Promise<types.Category> {
     return this.categoryService.createUserCategory(
       req.user.userId,
       createCategoryDto,
@@ -62,10 +47,10 @@ export class CategoryController {
 
   @Put(':id')
   async updateUserCategory(
-    @Request() req: AuthenticatedRequest,
+    @Request() req: types.AuthenticatedRequest,
     @Param('id') categoryId: string,
     @Body() updateData: UpdateCategoryDto,
-  ): Promise<Category> {
+  ): Promise<types.Category> {
     return this.categoryService.updateUserCategory(
       req.user.userId,
       categoryId,
@@ -75,9 +60,9 @@ export class CategoryController {
 
   @Delete(':id')
   async deleteUserCategory(
-    @Request() req: AuthenticatedRequest,
+    @Request() req: types.AuthenticatedRequest,
     @Param('id') categoryId: string,
-  ): Promise<Category> {
+  ): Promise<types.Category> {
     return this.categoryService.deleteUserCategory(req.user.userId, categoryId);
   }
 }

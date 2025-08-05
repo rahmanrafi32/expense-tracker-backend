@@ -2,56 +2,42 @@ import {
   IsDateString,
   IsEnum,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
-  Length,
 } from 'class-validator';
-
-export enum TransactionType {
-  CASH_IN = 'CASH_IN',
-  CASH_OUT = 'CASH_OUT',
-}
+import { TransactionType } from '@prisma/client';
 
 export class CreateTransactionDto {
   @IsNotEmpty({ message: 'Book ID is required' })
-  @IsUUID('4', { message: 'Book ID must be a valid UUID version 4' })
+  @IsUUID('all', { message: 'Book ID must be a valid UUID' })
   bookId: string;
 
   @IsNotEmpty({ message: 'Transaction type is required' })
-  @IsEnum(TransactionType, {
-    message: 'Transaction type must be either CASH_IN or CASH_OUT',
-  })
+  @IsEnum(TransactionType, { message: 'Type must be a valid transaction type' })
   type: TransactionType;
 
-  @IsNotEmpty({ message: 'Transaction date is required' })
+  @IsNotEmpty({ message: 'Date is required' })
   @IsDateString(
-    { strict: true },
-    {
-      message:
-        'Date must be in ISO 8601 format (YYYY-MM-DD or YYYY-MM-DDTHH:mm:ssZ)',
-    },
+    {},
+    { message: 'Date must be a valid ISO 8601 date string (e.g., YYYY-MM-DD)' },
   )
   date: string;
 
+  @IsNotEmpty({ message: 'Amount is required' })
+  @IsNumber({}, { message: 'Amount must be a valid number' })
+  amount: number;
+
   @IsOptional()
-  @IsString({ message: 'Remark must be a text string' })
-  @Length(0, 255, {
-    message: 'Remark cannot exceed 255 characters',
-  })
+  @IsString({ message: 'Remark must be a valid string' })
   remark?: string;
 
-  @IsNotEmpty({ message: 'Category is required' })
-  @IsString({ message: 'Category must be a text string' })
-  @Length(1, 100, {
-    message: 'Category must be between 1 and 100 characters',
-  })
+  @IsOptional()
+  @IsString({ message: 'Category must be a valid string' })
   category: string;
 
-  @IsNotEmpty({ message: 'Payment method is required' })
-  @IsString({ message: 'Payment method must be a text string' })
-  @Length(1, 100, {
-    message: 'Payment method must be between 1 and 100 characters',
-  })
+  @IsOptional()
+  @IsString({ message: 'Payment method must be a valid string' })
   paymentMethod: string;
 }

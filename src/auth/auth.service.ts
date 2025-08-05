@@ -3,8 +3,13 @@ import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../database/prisma.service';
 import { compare, hash } from 'bcrypt';
 import { CreateUserDto } from '../user/dto/create-user.dto';
-import { CommonResponse } from '../common/dto/common-response.dto';
+import { CommonResponse } from '../common';
 import { v4 as uuid } from 'uuid';
+import {
+  RefreshToken,
+  UserValidationResult,
+  RefreshTokenRecord,
+} from '../common';
 
 @Injectable()
 export class AuthService {
@@ -16,10 +21,7 @@ export class AuthService {
   async validateUser(
     email: string,
     pass: string,
-  ): Promise<{
-    email: string;
-    id: string;
-  } | null> {
+  ): Promise<UserValidationResult | null> {
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (user && (await compare(pass, user.password))) {
       const { password, ...result } = user;
@@ -28,7 +30,7 @@ export class AuthService {
     return null;
   }
 
-  async login(user: { email: string; id: string }): Promise<CommonResponse> {
+  async login(user: UserValidationResult): Promise<CommonResponse> {
     try {
       const payload = { email: user.email, sub: user.id };
       const accessToken = this.jwtService.sign(payload, {
@@ -90,12 +92,7 @@ export class AuthService {
     }
   }
 
-  async generateRefreshToken(userId: string): Promise<{
-    id: string;
-    userId: string;
-    token: string;
-    expiresAt: Date;
-  }> {
+  async generateRefreshToken(userId: string): Promise<RefreshTokenRecord> {
     const token = uuid();
     const hashedToken = await hash(token, 10);
     const expiresAt = new Date();
@@ -115,23 +112,41 @@ export class AuthService {
 
   async refreshAccessToken(refreshToken: string): Promise<CommonResponse> {
     try {
-      const tokenRecord = await this.prisma.refreshToken.findFirst({
-        where: {
-          expiresAt: { gt: new Date() },
-        },
-        include: { user: true },
-      });
-
-      if (!tokenRecord || !tokenRecord.user) {
+      if (!refreshToken) {
         return new CommonResponse(
           false,
-          HttpStatus.UNAUTHORIZED,
-          'Invalid or expired refresh token',
+          HttpStatus.BAD_REQUEST,
+          'Invalid refresh token format',
         );
       }
 
-      const isValid = await compare(refreshToken, tokenRecord.token);
-      if (!isValid) {
+      const tokenRecords: RefreshToken[] =
+        await this.prisma.refreshToken.findMany({
+          where: {
+            expiresAt: { gt: new Date() },
+          },
+          include: { user: true },
+        });
+
+      if (!tokenRecords || tokenRecords.length === 0) {
+        return new CommonResponse(
+          false,
+          HttpStatus.UNAUTHORIZED,
+          'No valid refresh tokens found',
+        );
+      }
+
+      let matchingTokenRecord: RefreshToken | undefined;
+
+      for (const record of tokenRecords) {
+        const isValid = await compare(refreshToken, record.token);
+        if (isValid) {
+          matchingTokenRecord = record;
+          break;
+        }
+      }
+
+      if (!matchingTokenRecord?.user) {
         return new CommonResponse(
           false,
           HttpStatus.UNAUTHORIZED,
@@ -140,11 +155,12 @@ export class AuthService {
       }
 
       const payload = {
-        email: tokenRecord.user.email,
-        sub: tokenRecord.user.id,
+        email: matchingTokenRecord.user.email,
+        sub: matchingTokenRecord.user.id,
       };
+
       const accessToken = this.jwtService.sign(payload, {
-        secret: process.env.JWT_SECRET || 'your_jwt_secret',
+        secret: process.env.JWT_SECRET,
         expiresIn: process.env.JWT_EXPIRATION_TIME || '1d',
       });
 
@@ -154,12 +170,15 @@ export class AuthService {
         'Access token refreshed successfully',
         { access_token: accessToken },
       );
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error occurred';
+
       return new CommonResponse(
         false,
         HttpStatus.INTERNAL_SERVER_ERROR,
-        error.message || 'Failed to refresh token',
-        error.stack,
+        'Failed to refresh token',
+        { error: errorMessage },
       );
     }
   }
