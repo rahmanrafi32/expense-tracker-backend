@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { CreateBookDto } from './dto/create-book.dto';
 import { UpdateBookDto } from './dto/update-book.dto';
@@ -43,16 +43,22 @@ export class BookService {
     return book;
   }
 
-  async update(id: string, updateBookDto: UpdateBookDto) {
-    await this.findOne(id);
+  async update(id: string, updateBookDto: UpdateBookDto, currentUserId: string) {
+    const book = await this.findOne(id);
+    if (book.userId !== currentUserId) {
+      throw new UnauthorizedException('You are not authorized to update this book');
+    }
     return this.prisma.book.update({
       where: { id },
       data: updateBookDto,
     });
   }
 
-  async remove(id: string) {
-    await this.findOne(id);
+  async remove(id: string, currentUserId: string) {
+    const book = await this.findOne(id);
+    if (book.userId !== currentUserId) {
+      throw new UnauthorizedException('You are not authorized to delete this book');
+    }
     return this.prisma.book.delete({
       where: { id },
     });
