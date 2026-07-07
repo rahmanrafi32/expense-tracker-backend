@@ -7,17 +7,24 @@ import {
   IsString,
   IsUUID,
 } from 'class-validator';
-import { TransactionType } from '@prisma/client';
+import { TransactionType } from '../enums/transaction-type.enum';
+import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateTransactionDto {
+  @ApiProperty({
+    example: '00000000-0000-4000-8000-000000000000',
+    description: 'Book UUID',
+  })
   @IsNotEmpty({ message: 'Book ID is required' })
   @IsUUID('all', { message: 'Book ID must be a valid UUID' })
   bookId: string;
 
+  @ApiProperty({ example: 'INCOME', enum: TransactionType })
   @IsNotEmpty({ message: 'Transaction type is required' })
   @IsEnum(TransactionType, { message: 'Type must be a valid transaction type' })
   type: TransactionType;
 
+  @ApiProperty({ example: '2026-06-04', description: 'ISO date string' })
   @IsNotEmpty({ message: 'Date is required' })
   @IsDateString(
     {},
@@ -25,18 +32,22 @@ export class CreateTransactionDto {
   )
   date: string;
 
+  @ApiProperty({ example: 100.5, description: 'Transaction amount' })
   @IsNotEmpty({ message: 'Amount is required' })
   @IsNumber({}, { message: 'Amount must be a valid number' })
   amount: number;
 
+  @ApiProperty({ example: 'Salary for June', required: false })
   @IsOptional()
   @IsString({ message: 'Remark must be a valid string' })
   remark?: string;
 
+  @ApiProperty({ example: 'Salary', required: false })
   @IsOptional()
   @IsString({ message: 'Category must be a valid string' })
   category: string;
 
+  @ApiProperty({ example: 'Bank Transfer', required: false })
   @IsOptional()
   @IsString({ message: 'Payment method must be a valid string' })
   paymentMethod: string;

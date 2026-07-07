@@ -9,6 +9,12 @@ import {
   UseGuards,
   Request,
 } from '@nestjs/common';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+} from '@nestjs/swagger';
 import { PaymentMethodService } from './payment-method.service';
 import { CreatePaymentMethodDto } from './dto/create-payment-method.dto';
 import { UpdatePaymentMethodDto } from './dto/update-payment-method.dto';
@@ -16,11 +22,15 @@ import { AuthGuard } from '@nestjs/passport';
 import * as types from '../common';
 
 @Controller('payment-methods')
+@ApiTags('Payment Methods')
+@ApiBearerAuth('jwt')
 @UseGuards(AuthGuard('jwt'))
 export class PaymentMethodController {
   constructor(private readonly paymentMethodService: PaymentMethodService) {}
 
   @Get()
+  @ApiOperation({ summary: 'Get payment methods (global + user)' })
+  @ApiResponse({ status: 200, description: 'List of payment methods' })
   async getPaymentMethodsForUser(
     @Request() req: types.AuthenticatedRequest,
   ): Promise<types.PaymentMethod[]> {
@@ -28,6 +38,11 @@ export class PaymentMethodController {
   }
 
   @Get('user-specific')
+  @ApiOperation({ summary: 'Get user-specific payment methods' })
+  @ApiResponse({
+    status: 200,
+    description: 'List of user-specific payment methods',
+  })
   async getUserSpecificPaymentMethods(
     @Request() req: types.AuthenticatedRequest,
   ): Promise<types.PaymentMethod[]> {
@@ -37,6 +52,8 @@ export class PaymentMethodController {
   }
 
   @Post()
+  @ApiOperation({ summary: 'Create a payment method for user' })
+  @ApiResponse({ status: 201, description: 'Payment method created' })
   async createUserPaymentMethod(
     @Request() req: types.AuthenticatedRequest,
     @Body() createPaymentMethodDto: CreatePaymentMethodDto,
@@ -48,6 +65,8 @@ export class PaymentMethodController {
   }
 
   @Put(':id')
+  @ApiOperation({ summary: 'Update a user payment method' })
+  @ApiResponse({ status: 200, description: 'Payment method updated' })
   async updateUserPaymentMethod(
     @Request() req: types.AuthenticatedRequest,
     @Param('id') paymentMethodId: string,
@@ -61,6 +80,8 @@ export class PaymentMethodController {
   }
 
   @Delete(':id')
+  @ApiOperation({ summary: 'Delete a user payment method' })
+  @ApiResponse({ status: 200, description: 'Payment method deleted' })
   async deleteUserPaymentMethod(
     @Request() req: types.AuthenticatedRequest,
     @Param('id') paymentMethodId: string,

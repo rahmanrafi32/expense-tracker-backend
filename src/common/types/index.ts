@@ -19,6 +19,8 @@ export interface UserLoginCredentials {
 }
 
 export interface UserValidationResult {
+  firstName: string;
+  lastName: string;
   email: string;
   id: string;
 }
@@ -44,7 +46,7 @@ export interface JwtPayload {
 }
 
 export interface JwtValidationPayload {
-  sub: string;
+  id: string;
   email: string;
 }
 
@@ -55,6 +57,7 @@ export interface AuthTokens {
 
 export interface AuthenticatedUser {
   userId: string;
+  id?: string;
   email: string;
 }
 
@@ -103,6 +106,6 @@ export interface Transaction {
 }
 
 export enum TransactionType {
-  CASH_IN = 'CASH_IN',
-  CASH_OUT = 'CASH_OUT',
+  INCOME = 'INCOME',
+  EXPENSE = 'EXPENSE',
 }

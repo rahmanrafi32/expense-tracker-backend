@@ -24,7 +24,7 @@ export class AuthService {
   ): Promise<UserValidationResult | null> {
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (user && (await compare(pass, user.password))) {
-      const { password, ...result } = user;
+      const { password: _password, ...result } = user;
       return result;
     }
     return null;
@@ -32,22 +32,30 @@ export class AuthService {
 
   async login(user: UserValidationResult): Promise<CommonResponse> {
     try {
-      const payload = { email: user.email, sub: user.id };
-      const accessToken = this.jwtService.sign(payload, {
+      const payload = {
+        email: user.email,
+        id: user.id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+      };
+      const accessToken = this.jwtService.sign<typeof payload>(payload, {
         secret: process.env.JWT_SECRET || 'your_jwt_secret',
-        expiresIn: process.env.JWT_EXPIRATION_TIME || '1d',
+        expiresIn: (process.env.JWT_EXPIRATION_TIME || '1d') as any,
       });
       const refreshToken = await this.generateRefreshToken(user.id);
       return new CommonResponse(true, HttpStatus.OK, 'Login successful', {
         access_token: accessToken,
         refresh_token: refreshToken.token,
       });
-    } catch (error) {
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to login';
+      const stack = error instanceof Error ? error.stack : undefined;
       return new CommonResponse(
         false,
         HttpStatus.INTERNAL_SERVER_ERROR,
-        error.message || 'Failed to login',
-        error.stack,
+        message,
+        stack,
       );
     }
   }
@@ -74,7 +82,7 @@ export class AuthService {
         },
       });
 
-      const { password, ...userWithoutPassword } = user;
+      const { password: _password, ...userWithoutPassword } = user;
 
       return new CommonResponse(
         true,
@@ -82,12 +90,15 @@ export class AuthService {
         'User registered successfully',
         userWithoutPassword,
       );
-    } catch (error) {
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to register user';
+      const stack = error instanceof Error ? error.stack : undefined;
       return new CommonResponse(
         false,
         HttpStatus.INTERNAL_SERVER_ERROR,
-        error.message || 'Failed to register user',
-        error.stack,
+        message,
+        stack,
       );
     }
   }
@@ -112,7 +123,9 @@ export class AuthService {
 
   async refreshAccessToken(refreshToken: string): Promise<CommonResponse> {
     try {
+      console.log('from service', refreshToken);
       if (!refreshToken) {
+        console.log('in the if');
         return new CommonResponse(
           false,
           HttpStatus.BAD_REQUEST,
@@ -159,9 +172,9 @@ export class AuthService {
         sub: matchingTokenRecord.user.id,
       };
 
-      const accessToken = this.jwtService.sign(payload, {
+      const accessToken = this.jwtService.sign<typeof payload>(payload, {
         secret: process.env.JWT_SECRET,
-        expiresIn: process.env.JWT_EXPIRATION_TIME || '1d',
+        expiresIn: (process.env.JWT_EXPIRATION_TIME || '1d') as any,
       });
 
       return new CommonResponse(
@@ -207,12 +220,17 @@ export class AuthService {
         HttpStatus.OK,
         'Refresh token revoked successfully',
       );
-    } catch (error) {
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Failed to revoke refresh token';
+      const stack = error instanceof Error ? error.stack : undefined;
       return new CommonResponse(
         false,
         HttpStatus.INTERNAL_SERVER_ERROR,
-        error.message || 'Failed to revoke refresh token',
-        error.stack,
+        message,
+        stack,
       );
     }
   }

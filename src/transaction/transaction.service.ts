@@ -6,10 +6,11 @@ import {
 import { PrismaService } from '../database/prisma.service';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
+import { TransactionType } from './enums/transaction-type.enum';
 import { Prisma, Transaction } from '@prisma/client';
 
 type TransactionUpdateData = {
-  type?: 'CASH_IN' | 'CASH_OUT';
+  type?: TransactionType;
   remark?: string;
   date?: Date;
   amount?: number;
@@ -316,7 +317,6 @@ export class TransactionService {
   ): Promise<void> {
     const { balance } = await this.getBookBalanceWithTx(tx, bookId);
 
-    // Update the book's total amount and updatedAt timestamp
     await tx.book.update({
       where: { id: bookId },
       data: {
@@ -339,11 +339,11 @@ export class TransactionService {
     });
 
     const totalCashIn = transactions
-      .filter((t) => t.type === 'CASH_IN')
+      .filter((t) => t.type === TransactionType.INCOME)
       .reduce((sum, t) => sum + t.amount, 0);
 
     const totalCashOut = transactions
-      .filter((t) => t.type === 'CASH_OUT')
+      .filter((t) => t.type === TransactionType.EXPENSE)
       .reduce((sum, t) => sum + t.amount, 0);
 
     const balance = totalCashIn - totalCashOut;

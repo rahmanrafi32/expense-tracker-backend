@@ -51,8 +51,12 @@ export class BookController {
   @Patch(':id')
   @ApiOperation({ summary: 'Update a book' })
   @ApiResponse({ status: 200, description: 'Updated book' })
-  update(@Param('id') id: string, @Body() updateBookDto: UpdateBookDto, @Request() req: any) {
-    const userId = req.user?.id;
+  update(
+    @Param('id') id: string,
+    @Body() updateBookDto: UpdateBookDto,
+    @Request() req: any,
+  ) {
+    const userId: string = req.user?.userId;
     return this.bookService.update(id, updateBookDto, userId);
   }
 
@@ -60,7 +64,7 @@ export class BookController {
   @ApiOperation({ summary: 'Delete a book' })
   @ApiResponse({ status: 200, description: 'Deleted book' })
   remove(@Param('id') id: string, @Request() req: any) {
-    const userId = req.user?.id;
+    const userId: string = req.user?.userId;
     return this.bookService.remove(id, userId);
   }
 }

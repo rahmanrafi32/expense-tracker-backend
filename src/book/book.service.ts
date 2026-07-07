@@ -20,12 +20,13 @@ export class BookService {
       data: {
         name: createBookDto.name,
         userId: createBookDto.userId,
+        bookTotalAmount: createBookDto.bookTotalAmount,
+        currency: createBookDto.currency,
       },
     });
   }
 
   async findAllByUser(userId: string) {
-    console.log('userId', userId);
     return this.prisma.book.findMany({
       where: { userId },
       include: { transactions: true },
@@ -43,10 +44,16 @@ export class BookService {
     return book;
   }
 
-  async update(id: string, updateBookDto: UpdateBookDto, currentUserId: string) {
+  async update(
+    id: string,
+    updateBookDto: UpdateBookDto,
+    currentUserId: string,
+  ) {
     const book = await this.findOne(id);
     if (book.userId !== currentUserId) {
-      throw new UnauthorizedException('You are not authorized to update this book');
+      throw new UnauthorizedException(
+        'You are not authorized to update this book',
+      );
     }
     return this.prisma.book.update({
       where: { id },
@@ -57,7 +64,9 @@ export class BookService {
   async remove(id: string, currentUserId: string) {
     const book = await this.findOne(id);
     if (book.userId !== currentUserId) {
-      throw new UnauthorizedException('You are not authorized to delete this book');
+      throw new UnauthorizedException(
+        'You are not authorized to delete this book',
+      );
     }
     return this.prisma.book.delete({
       where: { id },
