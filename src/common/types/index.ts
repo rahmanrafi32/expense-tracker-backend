@@ -28,16 +28,22 @@ export interface UserValidationResult {
 export interface RefreshToken {
   id: string;
   userId: string;
-  token: string;
+  tokenHash: string;
   expiresAt: Date;
+  createdAt: Date;
+  userAgent?: string | null;
+  ipAddress?: string | null;
   user: User;
 }
 
 export interface RefreshTokenRecord {
   id: string;
   userId: string;
-  token: string;
+  tokenHash: string;
   expiresAt: Date;
+  createdAt: Date;
+  userAgent?: string | null;
+  ipAddress?: string | null;
 }
 
 export interface JwtPayload {

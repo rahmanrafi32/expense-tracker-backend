@@ -1,7 +1,13 @@
 model RefreshToken {
   id        String   @id @default(uuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  token     String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  createdAt DateTime @default(now())
   expiresAt DateTime
+  userAgent String?
+  ipAddress String?
+
+  @@index([userId])
+  @@index([expiresAt])
 }
