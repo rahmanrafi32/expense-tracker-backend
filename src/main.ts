@@ -14,7 +14,7 @@ import { ResponseInterceptor, AllExceptionsFilter } from './common';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.enableCors({
-    origin: 'http://localhost:5173',
+    origin: 'https://lemon-river-03b4a8300.7.azurestaticapps.net/',
     credentials: true,
   });
   app.useGlobalPipes(new ValidationPipe());
