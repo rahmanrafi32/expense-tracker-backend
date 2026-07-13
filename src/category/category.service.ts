@@ -27,7 +27,7 @@ export class CategoryService {
     });
 
     if (existingCategory) {
-      throw new Error('Category with this name already exists');
+      throw new Error('Category already exists');
     }
 
     return this.prisma.category.create({
