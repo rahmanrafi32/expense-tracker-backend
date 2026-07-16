@@ -4,6 +4,7 @@ import {
   Body,
   UnauthorizedException,
   UseGuards,
+  Get,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
@@ -11,11 +12,15 @@ import { CreateUserDto } from '../user/dto/create-user.dto';
 import { AuthGuard } from '@nestjs/passport';
 import { CommonResponse } from '../common';
 import * as types from '../common';
+import { PrismaService } from '../database/prisma.service';
 
 @Controller('auth')
 @ApiTags('Auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   @Post('login')
   @ApiOperation({ summary: 'Login with email and password' })
@@ -64,5 +69,23 @@ export class AuthController {
       throw new UnauthorizedException('Refresh token is required');
     }
     return this.authService.revokeRefreshToken(refreshToken);
+  }
+
+  @Get('db-test')
+  async dbTest() {
+    const start = performance.now();
+
+    await this.prisma.$queryRaw`SELECT 1`;
+
+    return {
+      elapsed: performance.now() - start,
+    };
+  }
+
+  @Get('ping')
+  ping() {
+    return {
+      time: new Date().toISOString(),
+    };
   }
 }

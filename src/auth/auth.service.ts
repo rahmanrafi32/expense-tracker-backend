@@ -19,13 +19,15 @@ export class AuthService {
     email: string,
     pass: string,
   ): Promise<UserValidationResult | null> {
+    const totalStart = performance.now();
+    const dbStart = performance.now();
     const user = await this.prisma.user.findUnique({ where: { email } });
-    if (user && (await compare(pass, user.password))) {
-      const { password, ...result } = user;
-      void password;
-      return result;
-    }
-    return null;
+    console.log('findUnique:', performance.now() - dbStart);
+    const bcryptStart = performance.now();
+    const isValid = user && (await compare(pass, user.password));
+    console.log('bcrypt:', performance.now() - bcryptStart);
+    console.log('validateUser total:', performance.now() - totalStart);
+    return isValid ? user : null;
   }
 
   async login(user: UserValidationResult): Promise<CommonResponse> {
@@ -116,6 +118,7 @@ export class AuthService {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + expirationDays);
 
+    const insertStart = performance.now();
     await this.prisma.refreshToken.create({
       data: {
         userId,
@@ -126,6 +129,7 @@ export class AuthService {
       },
     });
 
+    console.log('refreshToken create:', performance.now() - insertStart);
     return plainToken;
   }
 
