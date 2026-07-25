@@ -130,32 +130,38 @@ export class TransactionService {
     }
   }
 
-  async findAllByBook(bookId: string): Promise<
-    Prisma.TransactionGetPayload<{
+  async findAllByBook(
+    bookId: string,
+    cursor?: string,
+    limit = 20,
+  ): Promise<{
+    data: Prisma.TransactionGetPayload<{
       include: {
         category: { select: { id: true; name: true } };
         paymentMethod: { select: { id: true; name: true } };
       };
-    }>[]
-  > {
-    return this.prisma.transaction.findMany({
+    }>[];
+    nextCursor: string | null;
+  }> {
+    const transactions = await this.prisma.transaction.findMany({
       where: { bookId },
       orderBy: { date: 'desc' },
+      take: limit + 1,
+      ...(cursor && {
+        cursor: { id: cursor },
+        skip: 1,
+      }),
       include: {
-        category: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-        paymentMethod: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
+        category: { select: { id: true, name: true } },
+        paymentMethod: { select: { id: true, name: true } },
       },
     });
+
+    const hasNextPage = transactions.length > limit;
+    const data = hasNextPage ? transactions.slice(0, -1) : transactions;
+    const nextCursor = hasNextPage ? data[data.length - 1].id : null;
+
+    return { data, nextCursor };
   }
 
   async findOne(id: string): Promise<

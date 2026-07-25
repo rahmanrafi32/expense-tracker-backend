@@ -36,10 +36,17 @@ export class TransactionController {
 
   @Get()
   @ApiOperation({ summary: 'Get transactions by book' })
-  @ApiResponse({ status: 200, description: 'List of transactions' })
-  findAll(@Query('bookId') bookId: string) {
-    console.log(`Finding transactions for book: ${bookId}`);
-    return this.transactionService.findAllByBook(bookId);
+  @ApiResponse({ status: 200, description: 'Paginated list of transactions' })
+  findAll(
+    @Query('bookId') bookId: string,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.transactionService.findAllByBook(
+      bookId,
+      cursor,
+      limit ? parseInt(limit, 10) : 20,
+    );
   }
 
   @Get(':id')

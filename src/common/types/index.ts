@@ -23,6 +23,7 @@ export interface UserValidationResult {
   lastName: string;
   email: string;
   id: string;
+  profilePic: string | null;
 }
 
 export interface RefreshToken {
