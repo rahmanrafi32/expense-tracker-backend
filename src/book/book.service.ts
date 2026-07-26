@@ -33,14 +33,12 @@ export class BookService {
   async findAllByUser(userId: string) {
     return this.prisma.book.findMany({
       where: { userId },
-      include: { transactions: true },
     });
   }
 
   async findOne(id: string) {
     const book = await this.prisma.book.findUnique({
       where: { id },
-      include: { transactions: true },
     });
     if (!book) {
       throw new NotFoundException(`Book with id ${id} not found`);

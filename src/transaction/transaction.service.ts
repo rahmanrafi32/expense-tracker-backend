@@ -130,38 +130,39 @@ export class TransactionService {
     }
   }
 
-  async findAllByBook(
-    bookId: string,
-    cursor?: string,
-    limit = 20,
-  ): Promise<{
-    data: Prisma.TransactionGetPayload<{
-      include: {
-        category: { select: { id: true; name: true } };
-        paymentMethod: { select: { id: true; name: true } };
-      };
-    }>[];
-    nextCursor: string | null;
-  }> {
-    const transactions = await this.prisma.transaction.findMany({
-      where: { bookId },
-      orderBy: { date: 'desc' },
-      take: limit + 1,
-      ...(cursor && {
-        cursor: { id: cursor },
-        skip: 1,
+  async findAllByBook(bookId: string, cursor?: string, limit = 10) {
+    const [transactions, totals] = await this.prisma.$transaction([
+      this.prisma.transaction.findMany({
+        where: { bookId },
+        orderBy: { date: 'desc' },
+        take: limit + 1,
+        ...(cursor && {
+          cursor: { id: cursor },
+          skip: 1,
+        }),
+        include: {
+          category: { select: { id: true, name: true } },
+          paymentMethod: { select: { id: true, name: true } },
+        },
       }),
-      include: {
-        category: { select: { id: true, name: true } },
-        paymentMethod: { select: { id: true, name: true } },
-      },
-    });
+      this.prisma.transaction.groupBy({
+        by: ['type'],
+        where: { bookId },
+        orderBy: { type: 'asc' },
+        _sum: { amount: true },
+      }),
+    ]);
 
     const hasNextPage = transactions.length > limit;
     const data = hasNextPage ? transactions.slice(0, -1) : transactions;
     const nextCursor = hasNextPage ? data[data.length - 1].id : null;
 
-    return { data, nextCursor };
+    const totalIncome =
+      totals.find((t) => t.type === 'INCOME')?._sum?.amount ?? 0;
+    const totalExpense =
+      totals.find((t) => t.type === 'EXPENSE')?._sum?.amount ?? 0;
+
+    return { data, nextCursor, totalIncome, totalExpense };
   }
 
   async findOne(id: string): Promise<
