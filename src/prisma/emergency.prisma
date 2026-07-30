@@ -1,0 +1,22 @@
+model EmergencyFund {
+  id        String            @id @default(uuid())
+  bookId    String
+  book      Book              @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  type      EmergencyFundType
+  amount    Float
+  remark    String
+  category  String            @default("General")
+  date      DateTime          @default(now())
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  transaction Transaction? @relation("EmergencyFundTransaction")
+
+  @@index([bookId])
+  @@index([date])
+}
+
+enum EmergencyFundType {
+  WITHDRAWAL
+  REPAYMENT
+}

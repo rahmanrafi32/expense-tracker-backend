@@ -2,6 +2,7 @@ model Category {
   id           String        @id @default(uuid())
   name         String
   isDefault    Boolean       @default(false)
+  isSystem     Boolean       @default(false)
   userId       String?
   user         User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
   transactions Transaction[]
@@ -9,4 +10,5 @@ model Category {
   updatedAt    DateTime      @updatedAt
 
   @@unique([name, userId])
+  @@index([userId])
 }

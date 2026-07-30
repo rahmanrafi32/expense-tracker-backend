@@ -8,6 +8,8 @@ import {
   Param,
   UseGuards,
   Request,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -29,7 +31,7 @@ export class PaymentMethodController {
   constructor(private readonly paymentMethodService: PaymentMethodService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Get payment methods (global + user)' })
+  @ApiOperation({ summary: 'Get payment methods (system + default + user)' })
   @ApiResponse({ status: 200, description: 'List of payment methods' })
   async getPaymentMethodsForUser(
     @Request() req: types.AuthenticatedRequest,
@@ -54,6 +56,10 @@ export class PaymentMethodController {
   @Post()
   @ApiOperation({ summary: 'Create a payment method for user' })
   @ApiResponse({ status: 201, description: 'Payment method created' })
+  @ApiResponse({
+    status: 409,
+    description: 'Payment method with this name already exists',
+  })
   async createUserPaymentMethod(
     @Request() req: types.AuthenticatedRequest,
     @Body() createPaymentMethodDto: CreatePaymentMethodDto,
@@ -67,6 +73,14 @@ export class PaymentMethodController {
   @Put(':id')
   @ApiOperation({ summary: 'Update a user payment method' })
   @ApiResponse({ status: 200, description: 'Payment method updated' })
+  @ApiResponse({
+    status: 404,
+    description: 'Payment method not found or cannot be updated',
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'Payment method with this name already exists',
+  })
   async updateUserPaymentMethod(
     @Request() req: types.AuthenticatedRequest,
     @Param('id') paymentMethodId: string,
@@ -80,13 +94,22 @@ export class PaymentMethodController {
   }
 
   @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete a user payment method' })
-  @ApiResponse({ status: 200, description: 'Payment method deleted' })
+  @ApiResponse({ status: 204, description: 'Payment method deleted' })
+  @ApiResponse({
+    status: 404,
+    description: 'Payment method not found or cannot be deleted',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Cannot delete payment method used in transactions',
+  })
   async deleteUserPaymentMethod(
     @Request() req: types.AuthenticatedRequest,
     @Param('id') paymentMethodId: string,
-  ): Promise<types.PaymentMethod> {
-    return this.paymentMethodService.deleteUserPaymentMethod(
+  ): Promise<void> {
+    await this.paymentMethodService.deleteUserPaymentMethod(
       req.user.userId,
       paymentMethodId,
     );

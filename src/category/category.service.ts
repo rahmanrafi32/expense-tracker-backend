@@ -1,4 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 
@@ -9,9 +14,13 @@ export class CategoryService {
   async getCategoriesForUser(userId: string) {
     return this.prisma.category.findMany({
       where: {
-        OR: [{ isDefault: true, userId: null }, { userId: userId }],
+        OR: [
+          { isSystem: true },
+          { isDefault: true, userId: null },
+          { userId: userId },
+        ],
       },
-      orderBy: [{ isDefault: 'desc' }, { name: 'asc' }],
+      orderBy: [{ isSystem: 'desc' }, { isDefault: 'desc' }, { name: 'asc' }],
     });
   }
 
@@ -22,18 +31,23 @@ export class CategoryService {
     const existingCategory = await this.prisma.category.findFirst({
       where: {
         name: createCategoryDto.name,
-        OR: [{ isDefault: true, userId: null }, { userId: userId }],
+        OR: [
+          { isSystem: true },
+          { isDefault: true, userId: null },
+          { userId: userId },
+        ],
       },
     });
 
     if (existingCategory) {
-      throw new Error('Category already exists');
+      throw new ConflictException('Category with this name already exists');
     }
 
     return this.prisma.category.create({
       data: {
         name: createCategoryDto.name,
         isDefault: false,
+        isSystem: false,
         userId: userId,
       },
     });
@@ -44,6 +58,27 @@ export class CategoryService {
       where: {
         userId: userId,
         isDefault: false,
+        isSystem: false,
+      },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  async getDefaultCategories() {
+    return this.prisma.category.findMany({
+      where: {
+        isDefault: true,
+        isSystem: false,
+        userId: null,
+      },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  async getSystemCategories() {
+    return this.prisma.category.findMany({
+      where: {
+        isSystem: true,
       },
       orderBy: { name: 'asc' },
     });
@@ -55,11 +90,12 @@ export class CategoryService {
         id: categoryId,
         userId: userId,
         isDefault: false,
+        isSystem: false,
       },
     });
 
     if (!category) {
-      throw new Error('Category not found or cannot be deleted');
+      throw new NotFoundException('Category not found or cannot be deleted');
     }
 
     const transactionCount = await this.prisma.transaction.count({
@@ -67,7 +103,7 @@ export class CategoryService {
     });
 
     if (transactionCount > 0) {
-      throw new Error(
+      throw new BadRequestException(
         'Cannot delete category that is being used in transactions',
       );
     }
@@ -87,28 +123,52 @@ export class CategoryService {
         id: categoryId,
         userId: userId,
         isDefault: false,
+        isSystem: false,
       },
     });
 
     if (!category) {
-      throw new Error('Category not found or cannot be updated');
+      throw new NotFoundException('Category not found or cannot be updated');
     }
 
     const existingCategory = await this.prisma.category.findFirst({
       where: {
         name: updateData.name,
-        OR: [{ isDefault: true, userId: null }, { userId: userId }],
+        OR: [
+          { isSystem: true },
+          { isDefault: true, userId: null },
+          { userId: userId },
+        ],
         NOT: { id: categoryId },
       },
     });
 
     if (existingCategory) {
-      throw new Error('Category with this name already exists');
+      throw new ConflictException('Category with this name already exists');
     }
 
     return this.prisma.category.update({
       where: { id: categoryId },
       data: { name: updateData.name },
     });
+  }
+
+  async getCategoryById(userId: string, categoryId: string) {
+    const category = await this.prisma.category.findFirst({
+      where: {
+        id: categoryId,
+        OR: [
+          { isSystem: true },
+          { isDefault: true, userId: null },
+          { userId: userId },
+        ],
+      },
+    });
+
+    if (!category) {
+      throw new NotFoundException('Category not found');
+    }
+
+    return category;
   }
 }

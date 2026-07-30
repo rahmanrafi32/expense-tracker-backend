@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Book" ADD COLUMN     "monthlyIncome" DOUBLE PRECISION NOT NULL DEFAULT 0.00;

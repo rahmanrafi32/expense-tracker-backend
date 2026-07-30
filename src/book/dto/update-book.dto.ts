@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsEnum } from 'class-validator';
+import { IsOptional, IsString, IsEnum, IsNumber } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { Currency } from './create-book.dto';
 
@@ -19,7 +19,8 @@ export class UpdateBookDto {
     message: 'Currency must be a valid ISO 4217 currency code',
   })
   currency?: Currency;
-
-  @ApiProperty({ example: 0, required: false })
-  bookTotalAmount: number;
+  @ApiProperty({ example: 60000, required: false })
+  @IsOptional()
+  @IsNumber({}, { message: 'Monthly income must be a number' })
+  monthlyIncome?: number;
 }

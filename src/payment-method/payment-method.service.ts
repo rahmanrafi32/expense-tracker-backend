@@ -1,4 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { CreatePaymentMethodDto } from './dto/create-payment-method.dto';
 
@@ -9,9 +14,13 @@ export class PaymentMethodService {
   async getPaymentMethodsForUser(userId: string) {
     return this.prisma.paymentMethod.findMany({
       where: {
-        OR: [{ isDefault: true, userId: null }, { userId: userId }],
+        OR: [
+          { isSystem: true },
+          { isDefault: true, userId: null },
+          { userId: userId },
+        ],
       },
-      orderBy: [{ isDefault: 'desc' }, { name: 'asc' }],
+      orderBy: [{ isSystem: 'desc' }, { isDefault: 'desc' }, { name: 'asc' }],
     });
   }
 
@@ -22,18 +31,25 @@ export class PaymentMethodService {
     const existingPaymentMethod = await this.prisma.paymentMethod.findFirst({
       where: {
         name: createPaymentMethodDto.name,
-        OR: [{ isDefault: true, userId: null }, { userId: userId }],
+        OR: [
+          { isSystem: true },
+          { isDefault: true, userId: null },
+          { userId: userId },
+        ],
       },
     });
 
     if (existingPaymentMethod) {
-      throw new Error('Payment method with this name already exists');
+      throw new ConflictException(
+        'Payment method with this name already exists',
+      );
     }
 
     return this.prisma.paymentMethod.create({
       data: {
         name: createPaymentMethodDto.name,
         isDefault: false,
+        isSystem: false,
         userId: userId,
       },
     });
@@ -44,6 +60,27 @@ export class PaymentMethodService {
       where: {
         userId: userId,
         isDefault: false,
+        isSystem: false,
+      },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  async getDefaultPaymentMethods() {
+    return this.prisma.paymentMethod.findMany({
+      where: {
+        isDefault: true,
+        isSystem: false,
+        userId: null,
+      },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  async getSystemPaymentMethods() {
+    return this.prisma.paymentMethod.findMany({
+      where: {
+        isSystem: true,
       },
       orderBy: { name: 'asc' },
     });
@@ -55,11 +92,14 @@ export class PaymentMethodService {
         id: paymentMethodId,
         userId: userId,
         isDefault: false,
+        isSystem: false,
       },
     });
 
     if (!paymentMethod) {
-      throw new Error('Payment method not found or cannot be deleted');
+      throw new NotFoundException(
+        'Payment method not found or cannot be deleted',
+      );
     }
 
     const transactionCount = await this.prisma.transaction.count({
@@ -67,7 +107,7 @@ export class PaymentMethodService {
     });
 
     if (transactionCount > 0) {
-      throw new Error(
+      throw new BadRequestException(
         'Cannot delete payment method that is being used in transactions',
       );
     }
@@ -87,28 +127,56 @@ export class PaymentMethodService {
         id: paymentMethodId,
         userId: userId,
         isDefault: false,
+        isSystem: false,
       },
     });
 
     if (!paymentMethod) {
-      throw new Error('Payment method not found or cannot be updated');
+      throw new NotFoundException(
+        'Payment method not found or cannot be updated',
+      );
     }
 
     const existingPaymentMethod = await this.prisma.paymentMethod.findFirst({
       where: {
         name: updateData.name,
-        OR: [{ isDefault: true, userId: null }, { userId: userId }],
+        OR: [
+          { isSystem: true },
+          { isDefault: true, userId: null },
+          { userId: userId },
+        ],
         NOT: { id: paymentMethodId },
       },
     });
 
     if (existingPaymentMethod) {
-      throw new Error('Payment method with this name already exists');
+      throw new ConflictException(
+        'Payment method with this name already exists',
+      );
     }
 
     return this.prisma.paymentMethod.update({
       where: { id: paymentMethodId },
       data: { name: updateData.name },
     });
+  }
+
+  async getPaymentMethodById(userId: string, paymentMethodId: string) {
+    const paymentMethod = await this.prisma.paymentMethod.findFirst({
+      where: {
+        id: paymentMethodId,
+        OR: [
+          { isSystem: true },
+          { isDefault: true, userId: null },
+          { userId: userId },
+        ],
+      },
+    });
+
+    if (!paymentMethod) {
+      throw new NotFoundException('Payment method not found');
+    }
+
+    return paymentMethod;
   }
 }
