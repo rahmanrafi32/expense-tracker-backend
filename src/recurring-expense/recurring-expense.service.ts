@@ -58,11 +58,26 @@ export class RecurringExpenseService {
     });
 
     const now = dayjs().startOf('day');
-    return bills.map((b) => ({
-      ...b,
-      monthlyEquivalent: Math.round(b.amount / FREQUENCY_MONTHS[b.frequency]),
-      daysUntilDue: dayjs(b.nextDueDate).diff(now, 'day'),
-    }));
+
+    return bills.map((b) => {
+      const daysUntil = dayjs(b.nextDueDate).diff(now, 'day');
+
+      let currentStatus: ExpenseStatus;
+      if (daysUntil < 0) {
+        currentStatus = ExpenseStatus.OVERDUE;
+      } else if (daysUntil <= 7) {
+        currentStatus = ExpenseStatus.UNPAID;
+      } else {
+        currentStatus = ExpenseStatus.PAID;
+      }
+
+      return {
+        ...b,
+        status: currentStatus,
+        monthlyEquivalent: Math.round(b.amount / FREQUENCY_MONTHS[b.frequency]),
+        daysUntilDue: daysUntil,
+      };
+    });
   }
 
   async findOne(id: string): Promise<ReccuringExpenses> {
@@ -93,14 +108,15 @@ export class RecurringExpenseService {
   async markPaid(id: string): Promise<ReccuringExpenses> {
     const expense = await this.findOne(id);
     const months = FREQUENCY_MONTHS[expense.frequency];
-    const nextDueDate = dayjs(expense.nextDueDate)
-      .add(months, 'month')
-      .toDate();
+    const nextDueDate = dayjs(expense.nextDueDate).add(months, 'month');
 
     return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const updated = await tx.reccuringExpenses.update({
         where: { id },
-        data: { status: ExpenseStatus.PAID, nextDueDate },
+        data: {
+          status: ExpenseStatus.PAID,
+          nextDueDate: nextDueDate.toDate(),
+        },
       });
 
       await tx.transaction.create({
