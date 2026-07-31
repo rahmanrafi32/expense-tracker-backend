@@ -24,8 +24,8 @@ export class BookService {
       data: {
         name: createBookDto.name,
         userId: createBookDto.userId,
-        bookTotalAmount: createBookDto.bookTotalAmount,
         currency: createBookDto.currency,
+        monthlyIncome: createBookDto.monthlyIncome ?? 0.0,
       },
     });
   }

@@ -37,7 +37,7 @@ export class AuthService {
         lastName: user.lastName,
         profilePic: user.profilePic,
       };
-      const accessToken = this.jwtService.sign<typeof payload>(payload, {
+      const accessToken = this.jwtService.sign(payload, {
         secret: process.env.JWT_SECRET || 'your_jwt_secret',
         expiresIn: (process.env.JWT_EXPIRATION_TIME || '1d') as StringValue,
       });

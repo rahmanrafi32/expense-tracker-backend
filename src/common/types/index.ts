@@ -42,7 +42,6 @@ export interface RefreshTokenRecord {
   userId: string;
   tokenHash: string;
   expiresAt: Date;
-  createdAt: Date;
   userAgent?: string | null;
   ipAddress?: string | null;
 }
@@ -76,6 +75,7 @@ export interface Category {
   id: string;
   name: string;
   isDefault: boolean;
+  isSystem: boolean;
   userId: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -85,6 +85,7 @@ export interface PaymentMethod {
   id: string;
   name: string;
   isDefault: boolean;
+  isSystem: boolean;
   userId: string | null;
   createdAt: Date;
   updatedAt: Date;

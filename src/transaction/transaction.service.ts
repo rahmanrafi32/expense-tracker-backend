@@ -8,6 +8,7 @@ import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { TransactionType } from './enums/transaction-type.enum';
 import { Prisma, Transaction } from '@prisma/client';
+import { BalanceService } from '../balance/balance.service';
 
 type TransactionUpdateData = {
   type?: TransactionType;
@@ -20,7 +21,10 @@ type TransactionUpdateData = {
 
 @Injectable()
 export class TransactionService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private balanceService: BalanceService,
+  ) {}
 
   async create(createTransactionDto: CreateTransactionDto) {
     const bookExists = await this.prisma.book.findUnique({
@@ -113,8 +117,10 @@ export class TransactionService {
             },
           });
 
-          // Update book balance
-          await this.updateBookBalance(tx, createTransactionDto.bookId);
+          await this.balanceService.updateBookBalance(
+            tx,
+            createTransactionDto.bookId,
+          );
 
           return newTransaction;
         },
@@ -301,7 +307,10 @@ export class TransactionService {
           },
         },
       });
-      await this.updateBookBalance(tx, existingTransaction.bookId);
+      await this.balanceService.updateBookBalance(
+        tx,
+        existingTransaction.bookId,
+      );
 
       return updatedTransaction;
     });
@@ -313,52 +322,8 @@ export class TransactionService {
       const deletedTransaction = await tx.transaction.delete({
         where: { id },
       });
-      await this.updateBookBalance(tx, transaction.bookId);
+      await this.balanceService.updateBookBalance(tx, transaction.bookId);
       return deletedTransaction;
     });
-  }
-
-  private async updateBookBalance(
-    tx: Prisma.TransactionClient,
-    bookId: string,
-  ): Promise<void> {
-    const { balance } = await this.getBookBalanceWithTx(tx, bookId);
-
-    await tx.book.update({
-      where: { id: bookId },
-      data: {
-        bookTotalAmount: balance,
-        updatedAt: new Date(),
-      },
-    });
-  }
-
-  private async getBookBalanceWithTx(
-    tx: Prisma.TransactionClient,
-    bookId: string,
-  ): Promise<{ balance: number; totalCashIn: number; totalCashOut: number }> {
-    const transactions = await tx.transaction.findMany({
-      where: { bookId },
-      select: {
-        amount: true,
-        type: true,
-      },
-    });
-
-    const totalCashIn = transactions
-      .filter((t) => t.type === TransactionType.INCOME)
-      .reduce((sum, t) => sum + t.amount, 0);
-
-    const totalCashOut = transactions
-      .filter((t) => t.type === TransactionType.EXPENSE)
-      .reduce((sum, t) => sum + t.amount, 0);
-
-    const balance = totalCashIn - totalCashOut;
-
-    return {
-      balance,
-      totalCashIn,
-      totalCashOut,
-    };
   }
 }

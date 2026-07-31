@@ -8,12 +8,15 @@ import {
   Param,
   UseGuards,
   Request,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import {
   ApiTags,
   ApiBearerAuth,
   ApiOperation,
   ApiResponse,
+  ApiParam,
 } from '@nestjs/swagger';
 import { CategoryService } from './category.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
@@ -29,8 +32,11 @@ export class CategoryController {
   constructor(private readonly categoryService: CategoryService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Get all categories (global + user)' })
-  @ApiResponse({ status: 200, description: 'List of categories' })
+  @ApiOperation({ summary: 'Get all categories (system + default + user)' })
+  @ApiResponse({
+    status: 200,
+    description: 'List of categories',
+  })
   async getCategoriesForUser(
     @Request() req: types.AuthenticatedRequest,
   ): Promise<types.Category[]> {
@@ -38,17 +44,47 @@ export class CategoryController {
   }
 
   @Get('user-specific')
-  @ApiOperation({ summary: 'Get user-specific categories' })
-  @ApiResponse({ status: 200, description: 'List of user-specific categories' })
+  @ApiOperation({ summary: 'Get user-specific categories only' })
+  @ApiResponse({
+    status: 200,
+    description: 'List of user-specific categories',
+  })
   async getUserSpecificCategories(
     @Request() req: types.AuthenticatedRequest,
   ): Promise<types.Category[]> {
     return this.categoryService.getUserSpecificCategories(req.user.userId);
   }
 
+  @Get('default')
+  @ApiOperation({ summary: 'Get default categories (shared across users)' })
+  @ApiResponse({
+    status: 200,
+    description: 'List of default categories',
+  })
+  async getDefaultCategories(): Promise<types.Category[]> {
+    return this.categoryService.getDefaultCategories();
+  }
+
+  @Get('system')
+  @ApiOperation({ summary: 'Get system categories (read-only)' })
+  @ApiResponse({
+    status: 200,
+    description: 'List of system categories',
+  })
+  async getSystemCategories(): Promise<types.Category[]> {
+    return this.categoryService.getSystemCategories();
+  }
+
   @Post()
   @ApiOperation({ summary: 'Create a category for the user' })
-  @ApiResponse({ status: 201, description: 'Category created' })
+  @ApiResponse({
+    status: 201,
+    description: 'Category created',
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'Category with this name already exists',
+  })
   async createUserCategory(
     @Request() req: types.AuthenticatedRequest,
     @Body() createCategoryDto: CreateCategoryDto,
@@ -61,7 +97,19 @@ export class CategoryController {
 
   @Put(':id')
   @ApiOperation({ summary: 'Update a user category' })
-  @ApiResponse({ status: 200, description: 'Category updated' })
+  @ApiParam({ name: 'id', description: 'Category ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Category updated',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Category not found or cannot be updated',
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'Category with this name already exists',
+  })
   async updateUserCategory(
     @Request() req: types.AuthenticatedRequest,
     @Param('id') categoryId: string,
@@ -75,12 +123,22 @@ export class CategoryController {
   }
 
   @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete a user category' })
-  @ApiResponse({ status: 200, description: 'Category deleted' })
+  @ApiParam({ name: 'id', description: 'Category ID' })
+  @ApiResponse({ status: 204, description: 'Category deleted' })
+  @ApiResponse({
+    status: 404,
+    description: 'Category not found or cannot be deleted',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Cannot delete category used in transactions',
+  })
   async deleteUserCategory(
     @Request() req: types.AuthenticatedRequest,
     @Param('id') categoryId: string,
-  ): Promise<types.Category> {
-    return this.categoryService.deleteUserCategory(req.user.userId, categoryId);
+  ): Promise<void> {
+    await this.categoryService.deleteUserCategory(req.user.userId, categoryId);
   }
 }

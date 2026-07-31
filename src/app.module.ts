@@ -7,6 +7,9 @@ import { BookModule } from './book/book.module';
 import { TransactionModule } from './transaction/transaction.module';
 import { CategoryModule } from './category/category.module';
 import { PaymentMethodModule } from './payment-method/payment-method.module';
+import { RecurringExpenseModule } from './recurring-expense/recurring-expense.module';
+import { GoalsModule } from './goals/goals.module';
+import { EmergencyFundsModule } from './emergency-funds/emergency-funds.module';
 
 @Module({
   imports: [
@@ -18,6 +21,9 @@ import { PaymentMethodModule } from './payment-method/payment-method.module';
     TransactionModule,
     CategoryModule,
     PaymentMethodModule,
+    RecurringExpenseModule,
+    GoalsModule,
+    EmergencyFundsModule,
   ],
   controllers: [],
   providers: [],

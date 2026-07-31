@@ -13,6 +13,12 @@ model Transaction {
   paymentMethodId String?
   paymentMethod   PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
 
+  emergencyFundId String?        @unique
+  emergencyFund   EmergencyFund? @relation("EmergencyFundTransaction", fields: [emergencyFundId], references: [id], onDelete: SetNull)
+
+  recurringExpenseId String?
+  recurringExpense   ReccuringExpenses? @relation("RecurringExpenseTransaction", fields: [recurringExpenseId], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }

@@ -5,6 +5,7 @@ import {
   MinLength,
   IsOptional,
   IsEnum,
+  IsNumber,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
@@ -45,9 +46,11 @@ export class CreateBookDto {
   currency?: Currency = Currency.BDT;
 
   @ApiProperty({
-    example: 0,
-    description: 'Transaction amount (derived/optional)',
+    example: 51700,
+    description: 'Expected monthly income/deposit for this book',
     required: false,
   })
-  bookTotalAmount: number;
+  @IsOptional()
+  @IsNumber({}, { message: 'Monthly income must be a number' })
+  monthlyIncome?: number;
 }
