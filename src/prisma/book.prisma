@@ -12,4 +12,5 @@ model Book {
   commitments      ReccuringExpenses[]
   goals            Goal[]
   emergencyEntries EmergencyFund[]
+  sinkingFunds     SinkingFund[]
 }
