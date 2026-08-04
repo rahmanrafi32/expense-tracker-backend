@@ -5,6 +5,7 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
 import { UserModule } from '../user/user.module';
+import { DatabaseModule } from '../database/database.module';
 
 @Module({
   imports: [
@@ -15,7 +16,7 @@ import { UserModule } from '../user/user.module';
       signOptions: { expiresIn: '1d' },
     }),
   ],
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, JwtStrategy, DatabaseModule],
   controllers: [AuthController],
   exports: [AuthService],
 })

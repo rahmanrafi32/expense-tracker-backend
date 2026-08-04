@@ -1,0 +1,29 @@
+model Transaction {
+  id     String          @id @default(uuid())
+  bookId String
+  book   Book            @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  type   TransactionType
+  date   DateTime
+  amount Float           @default(0.00)
+  remark String?
+
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id])
+
+  paymentMethodId String?
+  paymentMethod   PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
+
+  emergencyFundId String?        @unique
+  emergencyFund   EmergencyFund? @relation("EmergencyFundTransaction", fields: [emergencyFundId], references: [id], onDelete: SetNull)
+
+  recurringExpenseId String?
+  recurringExpense   ReccuringExpenses? @relation("RecurringExpenseTransaction", fields: [recurringExpenseId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+}

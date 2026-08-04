@@ -1,10 +1,12 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { StringValue } from 'ms';
 import { PrismaService } from '../database/prisma.service';
 import { compare, hash } from 'bcrypt';
 import { CreateUserDto } from '../user/dto/create-user.dto';
-import { CommonResponse } from '../common/dto/common-response.dto';
-import { v4 as uuid } from 'uuid';
+import { CommonResponse } from '../common';
+import { UserValidationResult } from '../common';
+import { TokenUtil } from './token.util';
 
 @Injectable()
 export class AuthService {
@@ -16,36 +18,43 @@ export class AuthService {
   async validateUser(
     email: string,
     pass: string,
-  ): Promise<{
-    email: string;
-    id: string;
-  } | null> {
+  ): Promise<UserValidationResult | null> {
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (user && (await compare(pass, user.password))) {
       const { password, ...result } = user;
+      void password;
       return result;
     }
     return null;
   }
 
-  async login(user: { email: string; id: string }): Promise<CommonResponse> {
+  async login(user: UserValidationResult): Promise<CommonResponse> {
     try {
-      const payload = { email: user.email, sub: user.id };
+      const payload = {
+        email: user.email,
+        id: user.id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        profilePic: user.profilePic,
+      };
       const accessToken = this.jwtService.sign(payload, {
         secret: process.env.JWT_SECRET || 'your_jwt_secret',
-        expiresIn: process.env.JWT_EXPIRATION_TIME || '1d',
+        expiresIn: (process.env.JWT_EXPIRATION_TIME || '1d') as StringValue,
       });
       const refreshToken = await this.generateRefreshToken(user.id);
       return new CommonResponse(true, HttpStatus.OK, 'Login successful', {
         access_token: accessToken,
-        refresh_token: refreshToken.token,
+        refresh_token: refreshToken,
       });
-    } catch (error) {
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to login';
+      const stack = error instanceof Error ? error.stack : undefined;
       return new CommonResponse(
         false,
         HttpStatus.INTERNAL_SERVER_ERROR,
-        error.message || 'Failed to login',
-        error.stack,
+        message,
+        stack,
       );
     }
   }
@@ -73,6 +82,7 @@ export class AuthService {
       });
 
       const { password, ...userWithoutPassword } = user;
+      void password;
 
       return new CommonResponse(
         true,
@@ -80,58 +90,58 @@ export class AuthService {
         'User registered successfully',
         userWithoutPassword,
       );
-    } catch (error) {
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to register user';
+      const stack = error instanceof Error ? error.stack : undefined;
       return new CommonResponse(
         false,
         HttpStatus.INTERNAL_SERVER_ERROR,
-        error.message || 'Failed to register user',
-        error.stack,
+        message,
+        stack,
       );
     }
   }
 
-  async generateRefreshToken(userId: string): Promise<{
-    id: string;
-    userId: string;
-    token: string;
-    expiresAt: Date;
-  }> {
-    const token = uuid();
-    const hashedToken = await hash(token, 10);
-    const expiresAt = new Date();
-    const expirationDays = process.env.JWT_REFRESH_TOKEN_EXPIRATION
-      ? parseInt(process.env.JWT_REFRESH_TOKEN_EXPIRATION, 10)
-      : 7;
-    expiresAt.setDate(expiresAt.getDate() + expirationDays);
+  async generateRefreshToken(
+    userId: string,
+    userAgent?: string,
+    ipAddress?: string,
+  ) {
+    const { plainToken, tokenHash } = TokenUtil.generateRefreshToken();
 
-    return this.prisma.refreshToken.create({
+    const expirationDays = Number(
+      process.env.JWT_REFRESH_TOKEN_EXPIRATION ?? 7,
+    );
+
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + expirationDays);
+    await this.prisma.refreshToken.create({
       data: {
         userId,
-        token: hashedToken,
+        tokenHash,
         expiresAt,
+        userAgent,
+        ipAddress,
       },
     });
+    return plainToken;
   }
 
   async refreshAccessToken(refreshToken: string): Promise<CommonResponse> {
     try {
-      const tokenRecord = await this.prisma.refreshToken.findFirst({
+      const tokenHash = TokenUtil.hashToken(refreshToken);
+
+      const tokenRecord = await this.prisma.refreshToken.findUnique({
         where: {
-          expiresAt: { gt: new Date() },
+          tokenHash,
         },
-        include: { user: true },
+        include: {
+          user: true,
+        },
       });
 
-      if (!tokenRecord || !tokenRecord.user) {
-        return new CommonResponse(
-          false,
-          HttpStatus.UNAUTHORIZED,
-          'Invalid or expired refresh token',
-        );
-      }
-
-      const isValid = await compare(refreshToken, tokenRecord.token);
-      if (!isValid) {
+      if (!tokenRecord) {
         return new CommonResponse(
           false,
           HttpStatus.UNAUTHORIZED,
@@ -139,48 +149,72 @@ export class AuthService {
         );
       }
 
+      if (tokenRecord.expiresAt < new Date()) {
+        await this.prisma.refreshToken.delete({
+          where: {
+            id: tokenRecord.id,
+          },
+        });
+
+        return new CommonResponse(
+          false,
+          HttpStatus.UNAUTHORIZED,
+          'Refresh token expired',
+        );
+      }
+
+      /**
+       * ROTATE TOKEN
+       */
+
+      const newRefreshToken = await this.generateRefreshToken(
+        tokenRecord.user.id,
+        tokenRecord.userAgent ?? undefined,
+        tokenRecord.ipAddress ?? undefined,
+      );
+
+      await this.prisma.refreshToken.delete({
+        where: {
+          id: tokenRecord.id,
+        },
+      });
+
       const payload = {
+        id: tokenRecord.user.id,
         email: tokenRecord.user.email,
-        sub: tokenRecord.user.id,
       };
+
       const accessToken = this.jwtService.sign(payload, {
         secret: process.env.JWT_SECRET || 'your_jwt_secret',
-        expiresIn: process.env.JWT_EXPIRATION_TIME || '1d',
+        expiresIn: (process.env.JWT_EXPIRATION_TIME || '1d') as StringValue,
       });
 
       return new CommonResponse(
         true,
         HttpStatus.OK,
-        'Access token refreshed successfully',
-        { access_token: accessToken },
+        'Token refreshed successfully',
+        {
+          access_token: accessToken,
+          refresh_token: newRefreshToken,
+        },
       );
-    } catch (error) {
+    } catch {
       return new CommonResponse(
         false,
         HttpStatus.INTERNAL_SERVER_ERROR,
-        error.message || 'Failed to refresh token',
-        error.stack,
+        'Failed to refresh token',
       );
     }
   }
 
   async revokeRefreshToken(refreshToken: string): Promise<CommonResponse> {
     try {
-      const hashedToken = await hash(refreshToken, 10);
-      const tokenRecord = await this.prisma.refreshToken.findFirst({
-        where: { token: hashedToken },
-      });
+      const tokenHash = TokenUtil.hashToken(refreshToken);
 
-      if (!tokenRecord) {
-        return new CommonResponse(
-          false,
-          HttpStatus.NOT_FOUND,
-          'Refresh token not found',
-        );
-      }
-
-      await this.prisma.refreshToken.delete({
-        where: { id: tokenRecord.id },
+      await this.prisma.refreshToken.deleteMany({
+        where: {
+          tokenHash,
+        },
       });
 
       return new CommonResponse(
@@ -188,12 +222,45 @@ export class AuthService {
         HttpStatus.OK,
         'Refresh token revoked successfully',
       );
-    } catch (error) {
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Failed to revoke refresh token';
+      const stack = error instanceof Error ? error.stack : undefined;
       return new CommonResponse(
         false,
         HttpStatus.INTERNAL_SERVER_ERROR,
-        error.message || 'Failed to revoke refresh token',
-        error.stack,
+        message,
+        stack,
+      );
+    }
+  }
+
+  async revokeAllRefreshTokens(userId: string): Promise<CommonResponse> {
+    try {
+      await this.prisma.refreshToken.deleteMany({
+        where: {
+          userId,
+        },
+      });
+
+      return new CommonResponse(
+        true,
+        HttpStatus.OK,
+        'All refresh tokens revoked successfully',
+      );
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Failed to revoke refresh tokens';
+      const stack = error instanceof Error ? error.stack : undefined;
+      return new CommonResponse(
+        false,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+        message,
+        stack,
       );
     }
   }

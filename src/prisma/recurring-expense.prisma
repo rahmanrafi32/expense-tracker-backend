@@ -1,0 +1,43 @@
+model ReccuringExpenses {
+  id          String           @id @default(uuid())
+  bookId      String
+  book        Book             @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  name        String
+  amount      Float
+  category    ExpenseCategory
+  frequency   ExpenseFrequency
+  nextDueDate DateTime
+  status      ExpenseStatus    @default(UNPAID)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  transactions Transaction[]   @relation("RecurringExpenseTransaction")
+
+  @@index([bookId])
+  @@index([nextDueDate])
+}
+
+enum ExpenseCategory {
+  INSURANCE
+  PENSION
+  INSTALLMENT
+  UTILITY
+  INTERNET
+  RENT
+  SUBSCRIPTION
+  TAX
+  OTHER
+}
+
+enum ExpenseFrequency {
+  MONTHLY
+  QUARTERLY
+  HALF_YEARLY
+  YEARLY
+}
+
+enum ExpenseStatus {
+  PAID
+  UNPAID
+  OVERDUE
+}
