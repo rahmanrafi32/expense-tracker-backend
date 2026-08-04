@@ -141,30 +141,27 @@ export class RecurringExpenseService {
     return this.prisma.reccuringExpenses.delete({ where: { id } });
   }
 
-  async getSummary(bookId: string): Promise<{
-    monthlyTotal: number;
-    dueThisMonthCount: number;
-    dueThisMonthAmount: number;
-    nextDue: {
-      name: string;
-      amount: number;
-      nextDueDate: Date;
-      daysUntil: number;
-    } | null;
-  }> {
+  async getSummary(bookId: string) {
     const bills = await this.prisma.reccuringExpenses.findMany({
       where: { bookId },
     });
     const now = dayjs();
+    const endOfMonth = now.endOf('month');
 
     const monthlyTotal = bills.reduce(
       (sum, b) => sum + Math.round(b.amount / FREQUENCY_MONTHS[b.frequency]),
       0,
     );
 
-    const dueThisMonth = bills.filter((b) =>
-      dayjs(b.nextDueDate).isSame(now, 'month'),
-    );
+    const dueThisMonth = bills.filter((b) => {
+      const isUnpaid = b.status !== ExpenseStatus.PAID;
+      const isDueThisMonthOrEarlier =
+        dayjs(b.nextDueDate).isBefore(endOfMonth) ||
+        dayjs(b.nextDueDate).isSame(endOfMonth, 'day');
+      return isUnpaid && isDueThisMonthOrEarlier;
+    });
+
+    const dueThisMonthAmount = dueThisMonth.reduce((s, b) => s + b.amount, 0);
 
     const nextDue = bills
       .filter((b) => !dayjs(b.nextDueDate).isBefore(now.startOf('day')))
@@ -172,6 +169,15 @@ export class RecurringExpenseService {
         (a, b) =>
           dayjs(a.nextDueDate).valueOf() - dayjs(b.nextDueDate).valueOf(),
       )[0];
+
+    const book = await this.prisma.book.findUnique({
+      where: { id: bookId },
+      select: { bookTotalAmount: true },
+    });
+
+    const currentBalance = book?.bookTotalAmount ?? 0;
+    const shortfall = dueThisMonthAmount - currentBalance;
+    const hasShortfall = shortfall > 0;
 
     return {
       monthlyTotal,
@@ -188,6 +194,15 @@ export class RecurringExpenseService {
             ),
           }
         : null,
+      currentBalance,
+      shortfall: hasShortfall ? Math.round(shortfall * 100) / 100 : 0,
+      hasShortfall,
+      upcomingPayments: dueThisMonth.map((b) => ({
+        id: b.id,
+        name: b.name,
+        amount: b.amount,
+        nextDueDate: b.nextDueDate,
+      })),
     };
   }
 }
