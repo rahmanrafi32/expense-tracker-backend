@@ -141,4 +141,12 @@ export class CategoryController {
   ): Promise<void> {
     await this.categoryService.deleteUserCategory(req.user.userId, categoryId);
   }
+
+  @Get('system-expenses')
+  @ApiOperation({
+    summary: 'Get categories suitable for expenses/sinking funds',
+  })
+  getExpenseCategories() {
+    return this.categoryService.getExpenseCategories();
+  }
 }

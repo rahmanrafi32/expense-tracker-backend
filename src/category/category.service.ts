@@ -102,9 +102,13 @@ export class CategoryService {
       where: { categoryId: categoryId },
     });
 
-    if (transactionCount > 0) {
+    const sinkingFundCount = await this.prisma.sinkingFund.count({
+      where: { categoryId: categoryId },
+    });
+
+    if (transactionCount > 0 || sinkingFundCount > 0) {
       throw new BadRequestException(
-        'Cannot delete category that is being used in transactions',
+        'Cannot delete category that is being used in transactions or sinking funds',
       );
     }
 
@@ -170,5 +174,15 @@ export class CategoryService {
     }
 
     return category;
+  }
+
+  async getExpenseCategories() {
+    return this.prisma.category.findMany({
+      where: {
+        isIncome: false,
+        OR: [{ isSystem: true }, { isDefault: true, userId: null }],
+      },
+      orderBy: [{ isSystem: 'desc' }, { isDefault: 'desc' }, { name: 'asc' }],
+    });
   }
 }

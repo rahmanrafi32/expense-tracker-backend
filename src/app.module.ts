@@ -10,6 +10,7 @@ import { PaymentMethodModule } from './payment-method/payment-method.module';
 import { RecurringExpenseModule } from './recurring-expense/recurring-expense.module';
 import { GoalsModule } from './goals/goals.module';
 import { EmergencyFundsModule } from './emergency-funds/emergency-funds.module';
+import { SinkingFundsModule } from './sinking-funds/sinking-funds.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { EmergencyFundsModule } from './emergency-funds/emergency-funds.module';
     RecurringExpenseModule,
     GoalsModule,
     EmergencyFundsModule,
+    SinkingFundsModule,
   ],
   controllers: [],
   providers: [],
