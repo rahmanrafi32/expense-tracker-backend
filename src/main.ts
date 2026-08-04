@@ -18,6 +18,7 @@ async function bootstrap() {
       'https://salmon-forest-0428d1000.7.azurestaticapps.net',
       'http://localhost:4173',
       'http://localhost:5173',
+      'https://expense.minhazurrahman.me',
     ],
     credentials: true,
   });
