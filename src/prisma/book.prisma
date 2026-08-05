@@ -1,16 +1,17 @@
 model Book {
-  id               String              @id @default(uuid())
-  name             String
-  userId           String
-  bookTotalAmount  Float               @default(0.00)
-  monthlyIncome    Float               @default(0.00)
-  currency         String              @default("BDT")
-  user             User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt        DateTime            @default(now())
-  updatedAt        DateTime            @updatedAt
-  transactions     Transaction[]
-  commitments      ReccuringExpenses[]
-  goals            Goal[]
-  emergencyEntries EmergencyFund[]
-  sinkingFunds     SinkingFund[]
+  id                      String              @id @default(uuid())
+  name                    String
+  userId                  String
+  bookTotalAmount         Float               @default(0.00)
+  monthlyIncome           Float               @default(0.00)
+  expectedMonthlyExpenses Float               @default(0.00)
+  currency                String              @default("BDT")
+  user                    User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
+  transactions            Transaction[]
+  commitments             ReccuringExpenses[]
+  goals                   Goal[]
+  emergencyEntries        EmergencyFund[]
+  sinkingFunds            SinkingFund[]
 }

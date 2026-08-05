@@ -11,13 +11,18 @@ import { CreateCategoryDto } from './dto/create-category.dto';
 export class CategoryService {
   constructor(private prisma: PrismaService) {}
 
-  async getCategoriesForUser(userId: string) {
+  async getCategoriesForUser(userId: string, isIncome?: boolean) {
     return this.prisma.category.findMany({
       where: {
-        OR: [
-          { isSystem: true },
-          { isDefault: true, userId: null },
-          { userId: userId },
+        AND: [
+          {
+            OR: [
+              { isSystem: true },
+              { isDefault: true, userId: null },
+              { userId: userId },
+            ],
+          },
+          isIncome !== undefined ? { isIncome: isIncome } : {},
         ],
       },
       orderBy: [{ isSystem: 'desc' }, { isDefault: 'desc' }, { name: 'asc' }],
