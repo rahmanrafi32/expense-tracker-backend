@@ -10,6 +10,7 @@ import {
   Request,
   HttpCode,
   HttpStatus,
+  Query,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -39,8 +40,14 @@ export class CategoryController {
   })
   async getCategoriesForUser(
     @Request() req: types.AuthenticatedRequest,
+    @Query('isIncome') isIncome?: string,
   ): Promise<types.Category[]> {
-    return this.categoryService.getCategoriesForUser(req.user.userId);
+    const parsedIsIncome =
+      isIncome === 'true' ? true : isIncome === 'false' ? false : undefined;
+    return this.categoryService.getCategoriesForUser(
+      req.user.userId,
+      parsedIsIncome,
+    );
   }
 
   @Get('user-specific')

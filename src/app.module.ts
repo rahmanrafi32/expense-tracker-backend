@@ -11,6 +11,8 @@ import { RecurringExpenseModule } from './recurring-expense/recurring-expense.mo
 import { GoalsModule } from './goals/goals.module';
 import { EmergencyFundsModule } from './emergency-funds/emergency-funds.module';
 import { SinkingFundsModule } from './sinking-funds/sinking-funds.module';
+import { CashFlowModule } from './cash-flow/cash-flow.module';
+import { InsightsModule } from './insights/insights.module';
 
 @Module({
   imports: [
@@ -26,6 +28,8 @@ import { SinkingFundsModule } from './sinking-funds/sinking-funds.module';
     GoalsModule,
     EmergencyFundsModule,
     SinkingFundsModule,
+    CashFlowModule,
+    InsightsModule,
   ],
   controllers: [],
   providers: [],

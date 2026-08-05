@@ -39,7 +39,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
         } else {
           message = JSON.stringify(body);
         }
-        details = body as unknown;
+        details = body;
       }
     } else if (exception instanceof Error) {
       message = exception.message;
