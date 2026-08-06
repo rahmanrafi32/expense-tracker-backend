@@ -81,16 +81,20 @@ export class SpendingTrendsService {
     bookId: string,
     daysInMonth: number,
   ): Promise<number> {
+    const book = await this.prisma.book.findUnique({
+      where: { id: bookId },
+      select: { expectedMonthlyExpenses: true, type: true },
+    });
+
+    if (book?.type === 'ESCROW') {
+      return 0;
+    }
+
     const trend = await this.getSpendingTrend(bookId);
 
     if (trend.averageMonthly > 0) {
       return trend.averageMonthly / daysInMonth;
     }
-
-    const book = await this.prisma.book.findUnique({
-      where: { id: bookId },
-      select: { expectedMonthlyExpenses: true },
-    });
 
     return (book?.expectedMonthlyExpenses ?? 0) / daysInMonth;
   }

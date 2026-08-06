@@ -5,6 +5,7 @@ model Book {
   bookTotalAmount         Float               @default(0.00)
   monthlyIncome           Float               @default(0.00)
   expectedMonthlyExpenses Float               @default(0.00)
+  type                    BookType            @default(OPERATING)
   currency                String              @default("BDT")
   user                    User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt               DateTime            @default(now())
@@ -14,4 +15,9 @@ model Book {
   goals                   Goal[]
   emergencyEntries        EmergencyFund[]
   sinkingFunds            SinkingFund[]
+}
+
+enum BookType {
+  OPERATING
+  ESCROW
 }

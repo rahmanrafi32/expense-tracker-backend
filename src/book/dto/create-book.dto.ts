@@ -7,7 +7,8 @@ import {
   IsEnum,
   IsNumber,
 } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { BookType } from '@prisma/client';
 
 export enum Currency {
   USD = 'USD',
@@ -53,4 +54,9 @@ export class CreateBookDto {
   @IsOptional()
   @IsNumber({}, { message: 'Monthly income must be a number' })
   monthlyIncome?: number;
+
+  @ApiPropertyOptional({ enum: BookType, default: 'OPERATING' })
+  @IsOptional()
+  @IsEnum(BookType)
+  type?: BookType;
 }
