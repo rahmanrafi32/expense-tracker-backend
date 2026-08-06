@@ -2,17 +2,14 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsDate,
   IsEnum,
+  IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
   Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import {
-  ExpenseCategory,
-  ExpenseFrequency,
-  ExpenseStatus,
-} from '@prisma/client';
+import { ExpenseFrequency, ExpenseStatus } from '@prisma/client';
 
 export class UpdateRecurringExpenseDto {
   @ApiPropertyOptional({ example: 'Moon MetLife' })
@@ -26,10 +23,13 @@ export class UpdateRecurringExpenseDto {
   @Min(0)
   amount?: number;
 
-  @ApiPropertyOptional({ enum: ExpenseCategory })
   @IsOptional()
-  @IsEnum(ExpenseCategory)
-  category?: ExpenseCategory;
+  @IsString()
+  category?: string;
+
+  @IsString()
+  @IsNotEmpty()
+  paymentMethod: string;
 
   @ApiPropertyOptional({ enum: ExpenseFrequency })
   @IsOptional()

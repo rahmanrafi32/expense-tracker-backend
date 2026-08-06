@@ -163,10 +163,6 @@ export class AuthService {
         );
       }
 
-      /**
-       * ROTATE TOKEN
-       */
-
       const newRefreshToken = await this.generateRefreshToken(
         tokenRecord.user.id,
         tokenRecord.userAgent ?? undefined,

@@ -13,4 +13,5 @@ model Category {
 
   @@unique([name, userId])
   @@index([userId])
+  reccuringExpenses ReccuringExpenses[] @relation("RecurringExpenseCategory")
 }

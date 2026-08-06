@@ -28,8 +28,6 @@ export class AllExceptionsFilter implements ExceptionFilter {
       if (typeof excResponse === 'string') {
         message = excResponse;
       } else if (typeof excResponse === 'object' && excResponse !== null) {
-        // Nest validation and other exceptions often provide { message, error, statusCode }
-        // Prefer message property if present, otherwise stringify
         const body = excResponse as Record<string, unknown>;
         if ('message' in body) {
           const mb = body.message;
@@ -39,7 +37,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
         } else {
           message = JSON.stringify(body);
         }
-        details = body as unknown;
+        details = body;
       }
     } else if (exception instanceof Error) {
       message = exception.message;

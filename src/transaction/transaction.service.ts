@@ -36,7 +36,6 @@ export class TransactionService {
       throw new NotFoundException(`Book not found`);
     }
 
-    // Validate amount
     if (
       createTransactionDto.amount !== undefined &&
       createTransactionDto.amount < 0
@@ -228,7 +227,6 @@ export class TransactionService {
       amount: updateTransactionDto.amount,
     };
 
-    // Handle category update
     if (updateTransactionDto.category) {
       let category = await this.prisma.category.findFirst({
         where: {
@@ -252,7 +250,6 @@ export class TransactionService {
       updateData.categoryId = category.id;
     }
 
-    // Handle payment method update
     if (updateTransactionDto.paymentMethod) {
       let paymentMethod = await this.prisma.paymentMethod.findFirst({
         where: {

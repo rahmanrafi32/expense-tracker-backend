@@ -32,7 +32,6 @@ export class EmergencyService {
 
     const entryDate = dto.date ? new Date(dto.date) : new Date();
 
-    // Map to YOUR enum: WITHDRAWAL -> EXPENSE, REPAYMENT -> INCOME
     const txType =
       dto.type === EmergencyEntryType.WITHDRAWAL
         ? TransactionType.EXPENSE
@@ -57,11 +56,10 @@ export class EmergencyService {
           amount: dto.amount,
           remark: dto.remark,
           date: entryDate,
-          emergencyFundId: entry.id, // The link!
+          emergencyFundId: entry.id,
         },
       });
 
-      // 3. Recalculate book balance (EXACTLY like your TransactionService does)
       await this.updateBookBalance(tx, dto.bookId);
 
       return entry;
@@ -112,15 +110,12 @@ export class EmergencyService {
     if (!entry) throw new NotFoundException(`Emergency entry ${id} not found`);
 
     return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      // 1. Delete the linked transaction first
       if (entry.transaction) {
         await tx.transaction.delete({ where: { id: entry.transaction.id } });
       }
 
-      // 2. Delete the emergency entry
       await tx.emergencyFund.delete({ where: { id } });
 
-      // 3. Recalculate book balance
       await this.updateBookBalance(tx, entry.bookId);
 
       return { deleted: true };
@@ -167,5 +162,3 @@ export class EmergencyService {
     };
   }
 }
-
-

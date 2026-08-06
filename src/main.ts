@@ -16,13 +16,20 @@ async function bootstrap() {
   app.enableCors({
     origin: [
       'https://salmon-forest-0428d1000.7.azurestaticapps.net',
+      'https://expense.minhazurrahman.me',
       'http://localhost:4173',
       'http://localhost:5173',
       'https://expense.minhazurrahman.me',
     ],
     credentials: true,
   });
-  app.useGlobalPipes(new ValidationPipe());
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
   app.useGlobalInterceptors(new ResponseInterceptor());
   app.useGlobalFilters(new AllExceptionsFilter());
 

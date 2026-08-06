@@ -9,7 +9,7 @@ import {
   Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { ExpenseCategory, ExpenseFrequency } from '@prisma/client';
+import { ExpenseFrequency } from '@prisma/client';
 
 export class CreateRecurringExpenseDto {
   @ApiProperty({ example: 'uuid-of-book' })
@@ -34,13 +34,13 @@ export class CreateRecurringExpenseDto {
   @IsEnum(ExpenseFrequency)
   frequency: ExpenseFrequency;
 
-  @ApiProperty({
-    enum: ExpenseCategory,
-    example: ExpenseCategory.INSURANCE,
-    description: 'Category of the recurring expense',
-  })
-  @IsEnum(ExpenseCategory)
-  category: ExpenseCategory;
+  @IsString()
+  @IsNotEmpty()
+  category: string;
+
+  @IsString()
+  @IsNotEmpty()
+  paymentMethod: string;
 
   @ApiProperty({
     example: '2026-07-30T00:00:00.000Z',
