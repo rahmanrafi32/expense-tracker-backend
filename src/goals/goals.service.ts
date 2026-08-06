@@ -79,7 +79,6 @@ export class GoalsService {
     });
   }
 
-  /** Add a deposit to a goal — updates savedAmount automatically */
   async addDeposit(goalId: string, dto: CreateGoalDepositDto) {
     const goal = await this.findOne(goalId);
 

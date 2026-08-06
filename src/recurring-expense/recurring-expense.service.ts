@@ -33,7 +33,6 @@ export class RecurringExpenseService {
     });
     if (!book) throw new NotFoundException('Book not found');
 
-    // Category logic (already exists)
     let category = await this.prisma.category.findFirst({
       where: {
         name: dto.category,
@@ -45,7 +44,6 @@ export class RecurringExpenseService {
         data: { name: dto.category, userId: book.userId },
       });
 
-    // NEW: Payment Method logic
     let paymentMethod = await this.prisma.paymentMethod.findFirst({
       where: {
         name: dto.paymentMethod,
@@ -63,7 +61,7 @@ export class RecurringExpenseService {
         name: dto.name,
         amount: dto.amount,
         categoryId: category.id,
-        paymentMethodId: paymentMethod.id, // ADD THIS
+        paymentMethodId: paymentMethod.id,
         frequency: dto.frequency,
         nextDueDate: dto.nextDueDate,
         status: ExpenseStatus.UNPAID,
@@ -77,7 +75,7 @@ export class RecurringExpenseService {
     return {
       ...created,
       category: created.category?.name || null,
-      paymentMethod: created.paymentMethod?.name || null, // FLATTEN
+      paymentMethod: created.paymentMethod?.name || null,
     };
   }
 
@@ -159,7 +157,6 @@ export class RecurringExpenseService {
       data.categoryId = category.id;
     }
 
-    // NEW: Payment Method logic
     if (dto.paymentMethod !== undefined) {
       let paymentMethod = await this.prisma.paymentMethod.findFirst({
         where: {
@@ -186,7 +183,7 @@ export class RecurringExpenseService {
     return {
       ...updated,
       category: updated.category?.name || null,
-      paymentMethod: updated.paymentMethod?.name || null, // FLATTEN
+      paymentMethod: updated.paymentMethod?.name || null,
     };
   }
 

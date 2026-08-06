@@ -1,11 +1,15 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import { SpendingTrendsService } from '../spending-trends/spending-trends.service';
 import { GetCashFlowDto, CashFlowDayDto } from './dto/cash-flow-query.dto';
 import dayjs from 'dayjs';
 
 @Injectable()
 export class CashFlowService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly spendingTrendsService: SpendingTrendsService,
+  ) {}
 
   async getTimeline(dto: GetCashFlowDto): Promise<CashFlowDayDto[]> {
     const daysToProject = dto.days || 90;
@@ -19,11 +23,10 @@ export class CashFlowService {
     const endDate = startDate.add(daysToProject, 'day');
     const timeline: CashFlowDayDto[] = [];
 
-    // ---------------------------------------------------------
-    // 1. FETCH RAW DATA
-    // ---------------------------------------------------------
+    const spendingTrend = await this.spendingTrendsService.getSpendingTrend(
+      dto.bookId,
+    );
 
-    // A. Recurring Bills: Find all that have a due date within our window
     const recurringBills = await this.prisma.reccuringExpenses.findMany({
       where: {
         bookId: dto.bookId,
@@ -31,24 +34,18 @@ export class CashFlowService {
       },
     });
 
-    // B. Sinking Funds: Find unfunded goals that have a deadline within our window
     const sinkingFunds = await this.prisma.sinkingFund.findMany({
       where: {
         bookId: dto.bookId,
         deadline: { lte: endDate.toDate() },
-        savedAmount: { lt: this.prisma.sinkingFund.fields.targetAmount }, // Only unfunded
+        savedAmount: { lt: this.prisma.sinkingFund.fields.targetAmount },
       },
     });
 
-    // ---------------------------------------------------------
-    // 2. PRE-CALCULATE EVENTS INTO MAPS (O(1) Lookups)
-    // ---------------------------------------------------------
+    const incomeEvents = new Map<string, number>();
+    const billEvents = new Map<string, number>();
+    const sinkingEvents = new Map<string, number>();
 
-    const incomeEvents = new Map<string, number>(); // 'YYYY-MM-DD' -> amount
-    const billEvents = new Map<string, number>(); // 'YYYY-MM-DD' -> amount
-    const sinkingEvents = new Map<string, number>(); // 'YYYY-MM-DD' -> amount
-
-    // Map Monthly Income (Assume income arrives on the 1st of every month)
     let currentMonth = startDate.startOf('month');
     while (
       currentMonth.isBefore(endDate) ||
@@ -58,21 +55,16 @@ export class CashFlowService {
       currentMonth = currentMonth.add(1, 'month');
     }
 
-    // Map Recurring Bills (Crucial: Simulate multiple cycles if a monthly bill hits 3 times in 90 days)
     for (const bill of recurringBills) {
       let billDueDate = dayjs(bill.nextDueDate).startOf('day');
 
-      // Keep pushing the date forward by its frequency as long as it's within our window
       while (
         billDueDate.isBefore(endDate) ||
         billDueDate.isSame(endDate, 'day')
       ) {
         const dateKey = billDueDate.format('YYYY-MM-DD');
-
-        // Accumulate if multiple bills happen to fall on the exact same day
         billEvents.set(dateKey, (billEvents.get(dateKey) || 0) + bill.amount);
 
-        // Advance to the next cycle
         const monthsToAdd: Record<string, number> = {
           MONTHLY: 1,
           QUARTERLY: 3,
@@ -86,7 +78,6 @@ export class CashFlowService {
       }
     }
 
-    // Map Sinking Funds (They only impact the timeline on their exact deadline)
     for (const fund of sinkingFunds) {
       const deadline = dayjs(fund.deadline).startOf('day');
       if (deadline.isAfter(endDate)) continue;
@@ -101,10 +92,6 @@ export class CashFlowService {
       }
     }
 
-    // ---------------------------------------------------------
-    // 3. RUN THE DAY-BY-DAY SIMULATION
-    // ---------------------------------------------------------
-
     let currentBalance = book.bookTotalAmount;
     let currentDate = startDate;
 
@@ -115,37 +102,34 @@ export class CashFlowService {
       const dateKey = currentDate.format('YYYY-MM-DD');
       const daysInMonth = currentDate.daysInMonth();
 
-      // A. Apply Income
       if (incomeEvents.has(dateKey)) {
         currentBalance += incomeEvents.get(dateKey)!;
       }
 
-      // B. Apply Recurring Bills
       if (billEvents.has(dateKey)) {
         currentBalance -= billEvents.get(dateKey)!;
       }
 
-      // C. Apply Sinking Fund Payouts
       if (sinkingEvents.has(dateKey)) {
         currentBalance -= sinkingEvents.get(dateKey)!;
       }
 
-      // D. Apply Daily Variable Expenses (Smooth burn rate to prevent jagged graphs)
-      // We divide the monthly expected expense by the days in the current month
-      const dailyBurnRate = book.expectedMonthlyExpenses / daysInMonth;
+      const effectiveMonthly =
+        spendingTrend.averageMonthly > 0
+          ? spendingTrend.averageMonthly
+          : book.expectedMonthlyExpenses;
+
+      const dailyBurnRate = effectiveMonthly / daysInMonth;
       currentBalance -= dailyBurnRate;
 
-      // Prevent floating point drift over 90 days, keep it to 2 decimal places
       currentBalance = Math.round(currentBalance * 100) / 100;
 
-      // Push to timeline array
       timeline.push({
         date: dateKey,
         balance: currentBalance,
         isShortfall: currentBalance < 0,
       });
 
-      // Move to next day
       currentDate = currentDate.add(1, 'day');
     }
 

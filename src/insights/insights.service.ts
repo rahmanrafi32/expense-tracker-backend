@@ -8,14 +8,12 @@ import { MonthlyInsightDto, YearlyInsightDto } from './dto/insights.dto';
 export class InsightsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // --- REUSABLE HELPER ---
   private getMonthDateRange(month: number, year: number) {
     const startDate = dayjs(`${year}-${month}-01`).startOf('month').toDate();
     const endDate = dayjs(`${year}-${month}-01`).endOf('month').toDate();
     return { startDate, endDate };
   }
 
-  // --- FEATURE 1: Monthly Income vs. Expense Ratio ---
   async getMonthlyOverview(dto: MonthlyInsightDto) {
     const { startDate, endDate } = this.getMonthDateRange(dto.month, dto.year);
 
@@ -40,7 +38,6 @@ export class InsightsService {
     };
   }
 
-  // --- FEATURE 2: Spending by Sector (Category Breakdown) ---
   async getCategoryBreakdown(dto: MonthlyInsightDto) {
     const { startDate, endDate } = this.getMonthDateRange(dto.month, dto.year);
 
@@ -82,28 +79,24 @@ export class InsightsService {
     return top5;
   }
 
-  // --- FEATURE 3: Yearly Trend (Month-by-Month) ---
   async getYearlyTrend(dto: YearlyInsightDto) {
     const startDate = dayjs(`${dto.year}-01-01`).startOf('year').toDate();
     const endDate = dayjs(`${dto.year}-12-31`).endOf('year').toDate();
 
-    // Fetch all transactions for the year (optimized to only select needed fields)
     const transactions = await this.prisma.transaction.findMany({
       where: { bookId: dto.bookId, date: { gte: startDate, lte: endDate } },
       select: { type: true, amount: true, date: true },
     });
 
-    // Initialize an array of 12 months with 0 income and 0 expense
     const monthlyData = Array.from({ length: 12 }, (_, i) => ({
-      month: dayjs().month(i).format('MMM'), // 'Jan', 'Feb', etc.
+      month: dayjs().month(i).format('MMM'),
       income: 0,
       expense: 0,
       net: 0,
     }));
 
-    // Aggregate in memory (O(n) operation - very fast for a year of data)
     for (const tx of transactions) {
-      const monthIndex = dayjs(tx.date).month(); // 0-11
+      const monthIndex = dayjs(tx.date).month();
       if (tx.type === TransactionType.INCOME) {
         monthlyData[monthIndex].income += tx.amount;
       } else {
@@ -111,7 +104,6 @@ export class InsightsService {
       }
     }
 
-    // Calculate net and round values
     return monthlyData.map((m) => ({
       ...m,
       net: Math.round((m.income - m.expense) * 100) / 100,
@@ -120,7 +112,6 @@ export class InsightsService {
     }));
   }
 
-  // --- FEATURE 4: Fixed vs. Variable Expenses ---
   async getFixedVsVariable(dto: MonthlyInsightDto) {
     const { startDate, endDate } = this.getMonthDateRange(dto.month, dto.year);
 
@@ -150,12 +141,11 @@ export class InsightsService {
     ];
   }
 
-  // --- FEATURE 5: Payment Method Distribution ---
   async getPaymentMethodBreakdown(dto: MonthlyInsightDto) {
     const { startDate, endDate } = this.getMonthDateRange(dto.month, dto.year);
 
     const groupedExpenses = await this.prisma.transaction.groupBy({
-      by: ['paymentMethodId', 'recurringExpenseId'], // Include recurringExpenseId
+      by: ['paymentMethodId', 'recurringExpenseId'],
       where: {
         bookId: dto.bookId,
         type: TransactionType.EXPENSE,
@@ -194,7 +184,6 @@ export class InsightsService {
       if (g.paymentMethodId) {
         name = methodMap.get(g.paymentMethodId) || 'Unspecified';
       } else if (g.recurringExpenseId) {
-        // If it's a recurring expense, label it as the recurring bill name instead of "Unspecified"
         name = recurringMap.get(g.recurringExpenseId) || 'Recurring Bill';
       }
 
@@ -205,7 +194,6 @@ export class InsightsService {
     });
   }
 
-  // --- FEATURE 6: Top 5 Highest Transactions (Anomaly Detection) ---
   async getTopTransactions(dto: MonthlyInsightDto) {
     const { startDate, endDate } = this.getMonthDateRange(dto.month, dto.year);
 

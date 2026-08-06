@@ -13,6 +13,7 @@ import { EmergencyFundsModule } from './emergency-funds/emergency-funds.module';
 import { SinkingFundsModule } from './sinking-funds/sinking-funds.module';
 import { CashFlowModule } from './cash-flow/cash-flow.module';
 import { InsightsModule } from './insights/insights.module';
+import { SpendingTrendsModule } from './spending-trends/spending-trends.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { InsightsModule } from './insights/insights.module';
     SinkingFundsModule,
     CashFlowModule,
     InsightsModule,
+    SpendingTrendsModule,
   ],
   controllers: [],
   providers: [],
