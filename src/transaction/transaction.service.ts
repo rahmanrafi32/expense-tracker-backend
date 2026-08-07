@@ -135,16 +135,70 @@ export class TransactionService {
     }
   }
 
-  async findAllByBook(bookId: string, cursor?: string, limit = 10) {
+  async findAllByBook(
+    bookId: string,
+    cursor?: string,
+    limit = 10,
+    search?: string,
+    type?: string,
+    sortBy?: string,
+    month?: number,
+    year?: number,
+    categoryId?: string,
+    paymentMethodId?: string,
+  ) {
+    const where: Prisma.TransactionWhereInput = {
+      bookId,
+    };
+
+    if (type && type !== 'ALL') {
+      where.type = type as TransactionType;
+    }
+
+    if (search) {
+      where.OR = [
+        { remark: { contains: search, mode: 'insensitive' } },
+        { category: { name: { contains: search, mode: 'insensitive' } } },
+      ];
+    }
+
+    if (categoryId) {
+      where.categoryId = categoryId;
+    }
+
+    if (paymentMethodId) {
+      where.paymentMethodId = paymentMethodId;
+    }
+
+    if (month && year) {
+      const startDate = new Date(year, month - 1, 1);
+      const endDate = new Date(year, month, 1);
+      where.date = {
+        gte: startDate,
+        lt: endDate,
+      };
+    } else if (year) {
+      const startDate = new Date(year, 0, 1);
+      const endDate = new Date(year + 1, 0, 1);
+      where.date = {
+        gte: startDate,
+        lt: endDate,
+      };
+    }
+
+    let orderBy: Prisma.TransactionOrderByWithRelationInput = { date: 'desc' };
+    if (sortBy === 'date_asc') orderBy = { date: 'asc' };
+    else if (sortBy === 'amount_desc') orderBy = { amount: 'desc' };
+    else if (sortBy === 'amount_asc') orderBy = { amount: 'asc' };
+
+    const skip = cursor ? parseInt(cursor, 10) : 0;
+
     const [transactions, totals] = await this.prisma.$transaction([
       this.prisma.transaction.findMany({
-        where: { bookId },
-        orderBy: { date: 'desc' },
-        take: limit + 1,
-        ...(cursor && {
-          cursor: { id: cursor },
-          skip: 1,
-        }),
+        where,
+        orderBy,
+        take: limit,
+        skip,
         include: {
           category: { select: { id: true, name: true } },
           paymentMethod: { select: { id: true, name: true } },
@@ -152,22 +206,21 @@ export class TransactionService {
       }),
       this.prisma.transaction.groupBy({
         by: ['type'],
-        where: { bookId },
+        where,
         orderBy: { type: 'asc' },
         _sum: { amount: true },
       }),
     ]);
 
-    const hasNextPage = transactions.length > limit;
-    const data = hasNextPage ? transactions.slice(0, -1) : transactions;
-    const nextCursor = hasNextPage ? data[data.length - 1].id : null;
+    const hasNextPage = transactions.length === limit;
+    const nextCursor = hasNextPage ? String(skip + limit) : null;
 
     const totalIncome =
       totals.find((t) => t.type === 'INCOME')?._sum?.amount ?? 0;
     const totalExpense =
       totals.find((t) => t.type === 'EXPENSE')?._sum?.amount ?? 0;
 
-    return { data, nextCursor, totalIncome, totalExpense };
+    return { data: transactions, nextCursor, totalIncome, totalExpense };
   }
 
   async findOne(id: string): Promise<
