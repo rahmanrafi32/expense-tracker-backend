@@ -35,17 +35,31 @@ export class TransactionController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get transactions by book' })
+  @ApiOperation({ summary: 'Get transactions by book with filters' })
   @ApiResponse({ status: 200, description: 'Paginated list of transactions' })
   findAll(
     @Query('bookId') bookId: string,
     @Query('cursor') cursor?: string,
     @Query('limit') limit?: string,
+    @Query('search') search?: string,
+    @Query('type') type?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('month') month?: string,
+    @Query('year') year?: string,
+    @Query('categoryId') categoryId?: string,
+    @Query('paymentMethodId') paymentMethodId?: string,
   ) {
     return this.transactionService.findAllByBook(
       bookId,
       cursor,
       limit ? parseInt(limit, 10) : 20,
+      search,
+      type,
+      sortBy,
+      month ? parseInt(month, 10) : undefined,
+      year ? parseInt(year, 10) : undefined,
+      categoryId,
+      paymentMethodId,
     );
   }
 
