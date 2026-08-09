@@ -12,12 +12,14 @@ import {
   ResetPasswordDto,
 } from './dto/password-reset.dto';
 import { createHash, randomBytes } from 'crypto';
+import { EmailNotificationService } from '../email-notification/email-notification.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly mailService: EmailNotificationService,
   ) {}
 
   async validateUser(
@@ -295,13 +297,10 @@ export class AuthService {
       },
     });
 
-    const resetLink = `http://localhost:3000/reset-password?token=${rawToken}`;
+    const frontendUrl = process.env.APP_URL || 'http://localhost:5173';
+    const resetLink = `${frontendUrl}/reset-password?token=${rawToken}`;
 
-    if (process.env.NODE_ENV !== 'production') {
-      console.log(`Password Reset Link for ${user.email}: ${resetLink}`);
-    }
-
-    // TODO: Step 2 - Send this link via Resend email service
+    await this.mailService.sendPasswordResetEmail(user.email, resetLink);
 
     return new CommonResponse(true, HttpStatus.OK, GENERIC_MESSAGE);
   }

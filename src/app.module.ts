@@ -15,6 +15,7 @@ import { CashFlowModule } from './cash-flow/cash-flow.module';
 import { InsightsModule } from './insights/insights.module';
 import { SpendingTrendsModule } from './spending-trends/spending-trends.module';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { EmailNotificationModule } from './email-notification/email-notification.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
     CashFlowModule,
     InsightsModule,
     SpendingTrendsModule,
+    EmailNotificationModule,
   ],
   controllers: [],
   providers: [],

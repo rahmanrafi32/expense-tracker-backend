@@ -6,6 +6,7 @@ import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
 import { UserModule } from '../user/user.module';
 import { DatabaseModule } from '../database/database.module';
+import { EmailNotificationModule } from '../email-notification/email-notification.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { DatabaseModule } from '../database/database.module';
       secret: process.env.JWT_SECRET || 'your_jwt_secret',
       signOptions: { expiresIn: '1d' },
     }),
+    EmailNotificationModule,
   ],
   providers: [AuthService, JwtStrategy, DatabaseModule],
   controllers: [AuthController],
