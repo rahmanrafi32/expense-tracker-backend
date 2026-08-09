@@ -1,17 +1,18 @@
 model User {
-  id             String          @id @default(uuid())
-  firstName      String
-  lastName       String
-  profilePic     String?
-  address        String?
-  phoneNumber    String?
-  email          String          @unique
-  password       String
-  country        String?
-  books          Book[]
-  refreshTokens  RefreshToken[]
-  categories     Category[]
-  paymentMethods PaymentMethod[]
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  id                  String               @id @default(uuid())
+  firstName           String
+  lastName            String
+  profilePic          String?
+  address             String?
+  phoneNumber         String?
+  email               String               @unique
+  password            String
+  country             String?
+  books               Book[]
+  refreshTokens       RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+  categories          Category[]
+  paymentMethods      PaymentMethod[]
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
 }

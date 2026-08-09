@@ -2,11 +2,16 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { StringValue } from 'ms';
 import { PrismaService } from '../database/prisma.service';
-import { compare, hash } from 'bcrypt';
+import { compare, genSalt, hash } from 'bcrypt';
 import { CreateUserDto } from '../user/dto/create-user.dto';
 import { CommonResponse } from '../common';
 import { UserValidationResult } from '../common';
 import { TokenUtil } from './token.util';
+import {
+  RequestPasswordResetDto,
+  ResetPasswordDto,
+} from './dto/password-reset.dto';
+import { createHash, randomBytes } from 'crypto';
 
 @Injectable()
 export class AuthService {
@@ -259,5 +264,107 @@ export class AuthService {
         stack,
       );
     }
+  }
+
+  async requestPasswordReset(
+    dto: RequestPasswordResetDto,
+  ): Promise<CommonResponse> {
+    const GENERIC_MESSAGE = 'A reset link has been sent to your email.';
+
+    const user = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
+
+    if (!user) {
+      await genSalt(10);
+      return new CommonResponse(true, HttpStatus.OK, GENERIC_MESSAGE);
+    }
+
+    const rawToken = randomBytes(32).toString('hex');
+    const hashedToken = createHash('sha256').update(rawToken).digest('hex');
+
+    await this.prisma.passwordResetToken.deleteMany({
+      where: { userId: user.id },
+    });
+
+    await this.prisma.passwordResetToken.create({
+      data: {
+        token: hashedToken,
+        userId: user.id,
+        expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+      },
+    });
+
+    const resetLink = `http://localhost:3000/reset-password?token=${rawToken}`;
+
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`Password Reset Link for ${user.email}: ${resetLink}`);
+    }
+
+    // TODO: Step 2 - Send this link via Resend email service
+
+    return new CommonResponse(true, HttpStatus.OK, GENERIC_MESSAGE);
+  }
+
+  async resetPassword(dto: ResetPasswordDto): Promise<CommonResponse> {
+    const GENERIC_TOKEN_ERROR = 'Invalid or expired token';
+    const hashedToken = createHash('sha256').update(dto.token).digest('hex');
+
+    let resetRecord: {
+      id: string;
+      userId: string;
+      createdAt: Date;
+      expiresAt: Date;
+      token: string;
+    };
+
+    try {
+      resetRecord = await this.prisma.passwordResetToken.delete({
+        where: { token: hashedToken },
+      });
+    } catch {
+      return new CommonResponse(
+        false,
+        HttpStatus.BAD_REQUEST,
+        GENERIC_TOKEN_ERROR,
+      );
+    }
+
+    if (resetRecord.expiresAt < new Date()) {
+      return new CommonResponse(
+        false,
+        HttpStatus.BAD_REQUEST,
+        GENERIC_TOKEN_ERROR,
+      );
+    }
+
+    const salt = await genSalt(10);
+    const hashedPassword = await hash(dto.password, salt);
+
+    try {
+      await this.prisma.$transaction([
+        this.prisma.user.update({
+          where: { id: resetRecord.userId },
+          data: { password: hashedPassword },
+        }),
+        this.prisma.refreshToken.deleteMany({
+          where: { userId: resetRecord.userId },
+        }),
+      ]);
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to reset password';
+      return new CommonResponse(
+        false,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+        message,
+      );
+    }
+
+    return new CommonResponse(
+      true,
+      HttpStatus.OK,
+      'Password reset successfully. Please log in.',
+    );
   }
 }

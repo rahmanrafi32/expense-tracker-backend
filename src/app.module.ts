@@ -14,10 +14,12 @@ import { SinkingFundsModule } from './sinking-funds/sinking-funds.module';
 import { CashFlowModule } from './cash-flow/cash-flow.module';
 import { InsightsModule } from './insights/insights.module';
 import { SpendingTrendsModule } from './spending-trends/spending-trends.module';
+import { ThrottlerModule } from '@nestjs/throttler';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    ThrottlerModule.forRoot([{ ttl: 60000, limit: 10 }]),
     DatabaseModule,
     UserModule,
     AuthModule,
