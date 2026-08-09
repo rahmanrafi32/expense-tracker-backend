@@ -271,7 +271,8 @@ export class AuthService {
   async requestPasswordReset(
     dto: RequestPasswordResetDto,
   ): Promise<CommonResponse> {
-    const GENERIC_MESSAGE = 'A reset link has been sent to your email.';
+    const GENERIC_MESSAGE =
+      'A password reset link has been sent to your respective email address.';
 
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
