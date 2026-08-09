@@ -26,6 +26,7 @@ export class BookService {
         userId: createBookDto.userId,
         currency: createBookDto.currency,
         monthlyIncome: createBookDto.monthlyIncome ?? 0.0,
+        type: createBookDto.type,
       },
     });
   }
@@ -33,6 +34,7 @@ export class BookService {
   async findAllByUser(userId: string) {
     return this.prisma.book.findMany({
       where: { userId },
+      orderBy: { createdAt: 'asc' },
     });
   }
 
