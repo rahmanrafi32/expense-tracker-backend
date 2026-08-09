@@ -14,10 +14,13 @@ import { SinkingFundsModule } from './sinking-funds/sinking-funds.module';
 import { CashFlowModule } from './cash-flow/cash-flow.module';
 import { InsightsModule } from './insights/insights.module';
 import { SpendingTrendsModule } from './spending-trends/spending-trends.module';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { EmailNotificationModule } from './email-notification/email-notification.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    ThrottlerModule.forRoot([{ ttl: 60000, limit: 10 }]),
     DatabaseModule,
     UserModule,
     AuthModule,
@@ -32,6 +35,7 @@ import { SpendingTrendsModule } from './spending-trends/spending-trends.module';
     CashFlowModule,
     InsightsModule,
     SpendingTrendsModule,
+    EmailNotificationModule,
   ],
   controllers: [],
   providers: [],

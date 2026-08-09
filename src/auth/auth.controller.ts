@@ -11,6 +11,11 @@ import { CreateUserDto } from '../user/dto/create-user.dto';
 import { AuthGuard } from '@nestjs/passport';
 import { CommonResponse } from '../common';
 import * as types from '../common';
+import {
+  RequestPasswordResetDto,
+  ResetPasswordDto,
+} from './dto/password-reset.dto';
+import { Throttle } from '@nestjs/throttler';
 
 @Controller('auth')
 @ApiTags('Auth')
@@ -64,5 +69,16 @@ export class AuthController {
       throw new UnauthorizedException('Refresh token is required');
     }
     return this.authService.revokeRefreshToken(refreshToken);
+  }
+
+  @Throttle({ default: { limit: 2, ttl: 60000 } })
+  @Post('forgot-password')
+  async forgotPassword(@Body() dto: RequestPasswordResetDto) {
+    return this.authService.requestPasswordReset(dto);
+  }
+
+  @Post('reset-password')
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto);
   }
 }
