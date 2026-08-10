@@ -19,7 +19,6 @@ async function bootstrap() {
       'https://expense.minhazurrahman.me',
       'http://localhost:4173',
       'http://localhost:5173',
-      'https://expense.minhazurrahman.me',
     ],
     credentials: true,
   });
