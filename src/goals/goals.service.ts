@@ -79,12 +79,12 @@ export class GoalsService {
       },
     });
 
-    const now = dayjs();
+    const now = dayjs().startOf('day');
 
     return goals.map((goal) => {
       const { exactMonths, months, days } = getRemainingDuration(
         now,
-        dayjs(goal.deadline),
+        dayjs(goal.deadline).startOf('day'),
       );
 
       const difference = goal.targetAmount.minus(goal.savedAmount);
@@ -105,13 +105,9 @@ export class GoalsService {
 
       return {
         ...this.serializeGoal(goal),
-
         progressPct,
-
         remaining: remaining.toFixed(2),
-
         monthlyNeeded: monthlyNeeded.toFixed(2),
-
         monthsLeft: months,
         daysLeft: days,
       };

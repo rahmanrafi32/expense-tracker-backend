@@ -56,7 +56,21 @@ export class SinkingFundService {
     return this.serializeFund(fund);
   }
 
-  async findAllByBook(bookId: string) {
+  async findAllByBook(userId: string, bookId: string) {
+    const book = await this.prisma.book.findFirst({
+      where: {
+        id: bookId,
+        userId,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!book) {
+      throw new NotFoundException(`Book ${bookId} not found`);
+    }
+
     const funds = await this.prisma.sinkingFund.findMany({
       where: { bookId },
       orderBy: { deadline: 'asc' },
@@ -66,12 +80,12 @@ export class SinkingFundService {
       },
     });
 
-    const now = dayjs();
+    const now = dayjs().startOf('day');
 
     return funds.map((fund) => {
       const { exactMonths, months, days } = getRemainingDuration(
         now,
-        dayjs(fund.deadline),
+        dayjs(fund.deadline).startOf('day'),
       );
       const difference = fund.targetAmount.minus(fund.savedAmount);
       const remaining = difference.gt(0) ? difference : new Prisma.Decimal(0);

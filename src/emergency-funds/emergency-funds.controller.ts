@@ -41,11 +41,13 @@ export class EmergencyController {
   @ApiOperation({ summary: 'Get all emergency entries for a book (paginated)' })
   @ApiResponse({ status: 200, description: 'Paginated entries newest first' })
   findAll(
+    @Request() req: AuthenticatedRequest,
     @Query('bookId') bookId: string,
-    @Query('cursor') cursor?: string,
+    @Query('cursor') cursor: string = '',
     @Query('limit') limit?: string,
   ) {
     return this.emergencyService.findAllByBook(
+      req.user.userId,
       bookId,
       cursor,
       limit ? parseInt(limit, 10) : 20,

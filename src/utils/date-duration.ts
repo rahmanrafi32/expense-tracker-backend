@@ -20,7 +20,7 @@ export function getRemainingDuration(
 
   const exactMonths = to.diff(from, 'month', true);
 
-  let months = to.diff(from, 'month');
+  let months = Math.floor(exactMonths);
   let monthAnchor = from.add(months, 'month');
 
   if (monthAnchor.isAfter(to)) {
