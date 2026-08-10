@@ -242,21 +242,33 @@ export class SinkingFundService {
     return { deleted: true };
   }
 
-  private serializeFund<
-    T extends {
-      targetAmount: Prisma.Decimal;
-      savedAmount: Prisma.Decimal;
-      deposits: Array<{ amount: Prisma.Decimal }>;
-    },
-  >(fund: T) {
+  private serializeFund(
+    fund: Prisma.SinkingFundGetPayload<{
+      include: {
+        deposits: true;
+        category: {
+          select: {
+            id: true;
+            name: true;
+          };
+        };
+      };
+    }>,
+  ) {
     return {
-      ...fund,
+      id: fund.id,
+      bookId: fund.bookId,
+      name: fund.name,
       targetAmount: fund.targetAmount.toFixed(2),
       savedAmount: fund.savedAmount.toFixed(2),
+      deadline: fund.deadline,
+      createdAt: fund.createdAt,
+      updatedAt: fund.updatedAt,
       deposits: fund.deposits.map((deposit) => ({
         ...deposit,
         amount: deposit.amount.toFixed(2),
       })),
+      category: fund.category,
     };
   }
 

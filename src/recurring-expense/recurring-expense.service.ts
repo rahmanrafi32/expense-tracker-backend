@@ -97,6 +97,7 @@ export class RecurringExpenseService {
       amount: Prisma.Decimal;
       frequency: ExpenseFrequency;
       nextDueDate: Date;
+      status: ExpenseStatus;
     },
     now: Dayjs,
   ) {
@@ -105,12 +106,13 @@ export class RecurringExpenseService {
       .diff(now, 'day');
 
     let status: ExpenseStatus;
+
     if (daysUntilDue < 0) {
       status = ExpenseStatus.OVERDUE;
     } else if (daysUntilDue <= 7) {
       status = ExpenseStatus.UNPAID;
     } else {
-      status = ExpenseStatus.PAID;
+      status = bill.status;
     }
 
     const monthlyEquivalent = new Prisma.Decimal(bill.amount)
@@ -143,7 +145,18 @@ export class RecurringExpenseService {
     const now = dayjs().startOf('day');
 
     return bills.map((b) => ({
-      ...b,
+      id: b.id,
+      bookId: b.bookId,
+      name: b.name,
+      amount: b.amount,
+      frequency: b.frequency,
+      nextDueDate: b.nextDueDate,
+      createdAt: b.createdAt,
+      updatedAt: b.updatedAt,
+
+      category: b.category,
+      paymentMethod: b.paymentMethod,
+
       ...this.computeExpenseDisplay(b, now),
     }));
   }
