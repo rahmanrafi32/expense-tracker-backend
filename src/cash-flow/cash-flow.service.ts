@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { SpendingTrendsService } from '../spending-trends/spending-trends.service';
 import { GetCashFlowDto, CashFlowDayDto } from './dto/cash-flow-query.dto';
@@ -51,7 +52,10 @@ export class CashFlowService {
       currentMonth.isBefore(endDate) ||
       currentMonth.isSame(endDate, 'month')
     ) {
-      incomeEvents.set(currentMonth.format('YYYY-MM-DD'), book.monthlyIncome);
+      incomeEvents.set(
+        currentMonth.format('YYYY-MM-DD'),
+        new Prisma.Decimal(book.monthlyIncome).toNumber(),
+      );
       currentMonth = currentMonth.add(1, 'month');
     }
 
@@ -63,7 +67,11 @@ export class CashFlowService {
         billDueDate.isSame(endDate, 'day')
       ) {
         const dateKey = billDueDate.format('YYYY-MM-DD');
-        billEvents.set(dateKey, (billEvents.get(dateKey) || 0) + bill.amount);
+        billEvents.set(
+          dateKey,
+          (billEvents.get(dateKey) || 0) +
+            new Prisma.Decimal(bill.amount).toNumber(),
+        );
 
         const monthsToAdd: Record<string, number> = {
           MONTHLY: 1,
@@ -82,17 +90,17 @@ export class CashFlowService {
       const deadline = dayjs(fund.deadline).startOf('day');
       if (deadline.isAfter(endDate)) continue;
 
-      const remaining = fund.targetAmount - fund.savedAmount;
-      if (remaining > 0) {
+      const remaining = fund.targetAmount.minus(fund.savedAmount);
+      if (remaining.gt(0)) {
         const dateKey = deadline.format('YYYY-MM-DD');
         sinkingEvents.set(
           dateKey,
-          (sinkingEvents.get(dateKey) || 0) + remaining,
+          (sinkingEvents.get(dateKey) || 0) + remaining.toNumber(),
         );
       }
     }
 
-    let currentBalance = book.bookTotalAmount;
+    let currentBalance = new Prisma.Decimal(book.bookTotalAmount).toNumber();
     let currentDate = startDate;
 
     while (
@@ -117,7 +125,7 @@ export class CashFlowService {
       const effectiveMonthly =
         spendingTrend.averageMonthly > 0
           ? spendingTrend.averageMonthly
-          : book.expectedMonthlyExpenses;
+          : new Prisma.Decimal(book.expectedMonthlyExpenses).toNumber();
 
       const dailyBurnRate = effectiveMonthly / daysInMonth;
       currentBalance -= dailyBurnRate;
@@ -134,7 +142,8 @@ export class CashFlowService {
     }
 
     const firstEventIndex = timeline.findIndex(
-      (day) => day.balance !== book.bookTotalAmount,
+      (day) =>
+        day.balance !== new Prisma.Decimal(book.bookTotalAmount).toNumber(),
     );
 
     if (firstEventIndex > 7) {

@@ -1,7 +1,7 @@
 import {
   IsDateString,
   IsNotEmpty,
-  IsNumber,
+  IsDecimal,
   IsOptional,
   IsString,
   IsUUID,
@@ -21,16 +21,26 @@ export class CreateSinkingFundDto {
 
   @ApiProperty({ example: 15000 })
   @IsNotEmpty()
-  @IsNumber()
-  targetAmount: number;
+  @IsDecimal({
+    decimal_digits: '0,2',
+    force_decimal: false,
+  })
+  targetAmount: string;
 
   @ApiProperty({ example: '2026-11-30' })
   @IsNotEmpty()
   @IsDateString()
   deadline: string;
 
-  @ApiProperty({ example: 'wrench', required: false })
-  @IsOptional()
-  @IsString()
-  category: string;
+  @ApiProperty({
+    example: '99348009-2d8d-4617-b56a-2871ec12b13d',
+    description: 'Category UUID',
+  })
+  @IsNotEmpty({
+    message: 'Category ID is required',
+  })
+  @IsUUID('all', {
+    message: 'Category ID must be a valid UUID',
+  })
+  categoryId: string;
 }

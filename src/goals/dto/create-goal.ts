@@ -1,14 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsDecimal,
   IsNotEmpty,
-  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
-  Min,
 } from 'class-validator';
 
-export class CreateGoal {
+export class CreateGoalDto {
   @ApiProperty({ example: 'uuid-of-book' })
   @IsUUID()
   @IsNotEmpty()
@@ -19,19 +18,15 @@ export class CreateGoal {
   @IsNotEmpty()
   name: string;
 
-  @ApiProperty({ example: 38500 })
-  @IsNumber()
-  @Min(0)
-  targetAmount: number;
-
-  @ApiPropertyOptional({
-    example: 15000,
-    description: 'Amount already saved (default 0)',
+  @ApiProperty({
+    example: '38500.00',
+    description: 'Goal target amount',
   })
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  savedAmount?: number;
+  @IsDecimal({
+    decimal_digits: '0,2',
+    force_decimal: false,
+  })
+  targetAmount: string;
 
   @ApiProperty({
     example: '2026-10-31T00:00:00.000Z',

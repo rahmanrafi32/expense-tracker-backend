@@ -9,6 +9,7 @@ model PaymentMethod {
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
   reccuringExpenses ReccuringExpenses[] @relation("RecurringExpensePaymentMethod")
+  emergencyFunds    EmergencyFund[]     @relation("EmergencyFundPaymentMethod")
 
   @@unique([name, userId])
   @@index([userId])

@@ -3,8 +3,8 @@ model SinkingFund {
   bookId       String
   book         Book                 @relation(fields: [bookId], references: [id], onDelete: Cascade)
   name         String
-  targetAmount Float
-  savedAmount  Float                @default(0)
+  targetAmount Decimal              @db.Decimal(14, 2)
+  savedAmount  Decimal              @default(0) @db.Decimal(14, 2)
   deadline     DateTime
   deposits     SinkingFundDeposit[]
 
@@ -21,7 +21,7 @@ model SinkingFundDeposit {
   id            String      @id @default(uuid())
   sinkingFundId String
   sinkingFund   SinkingFund @relation(fields: [sinkingFundId], references: [id], onDelete: Cascade)
-  amount        Float
+  amount        Decimal     @db.Decimal(14, 2)
   note          String?
   date          DateTime    @default(now())
   createdAt     DateTime    @default(now())

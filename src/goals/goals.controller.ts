@@ -1,80 +1,186 @@
 import {
-  Controller,
-  Get,
-  Post,
   Body,
-  Param,
-  Patch,
+  Controller,
   Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import {
-  ApiTags,
   ApiBearerAuth,
   ApiOperation,
+  ApiQuery,
   ApiResponse,
+  ApiTags,
 } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
+import { Request } from 'express';
+
 import { GoalsService } from './goals.service';
-import { CreateGoal } from './dto/create-goal';
+import { CreateGoalDto } from './dto/create-goal';
+import { UpdateGoalDto } from './dto/update-goal';
 import { CreateGoalDepositDto } from './dto/create-goal-deposit';
+
+interface AuthenticatedRequest extends Request {
+  user: {
+    userId: string;
+    email: string;
+  };
+}
 
 @Controller('goals')
 @ApiTags('Goals')
 @ApiBearerAuth('jwt')
 @UseGuards(AuthGuard('jwt'))
 export class GoalsController {
-  constructor(private readonly goalService: GoalsService) {}
+  constructor(private readonly goalsService: GoalsService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create a goal' })
-  @ApiResponse({ status: 201, description: 'Goal created' })
-  create(@Body() dto: CreateGoal) {
-    return this.goalService.create(dto);
+  @ApiOperation({
+    summary: 'Create a goal',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Goal created successfully',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Book not found',
+  })
+  create(@Req() req: AuthenticatedRequest, @Body() dto: CreateGoalDto) {
+    return this.goalsService.create(req.user.userId, dto);
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get all goals for a book' })
+  @ApiOperation({
+    summary: 'Get all goals for a book',
+  })
+  @ApiQuery({
+    name: 'bookId',
+    required: true,
+    type: String,
+    description: 'Book UUID',
+  })
   @ApiResponse({
     status: 200,
-    description: 'Goals with progress, monthly needed, deposits',
+    description:
+      'Goals with progress, remaining amount, monthly requirement, and deposits',
   })
-  findAll(@Query('bookId') bookId: string) {
-    return this.goalService.findAllByBook(bookId);
+  findAll(
+    @Req() req: AuthenticatedRequest,
+    @Query('bookId', new ParseUUIDPipe()) bookId: string,
+  ) {
+    return this.goalsService.findAllByBook(req.user.userId, bookId);
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get a goal by id' })
-  findOne(@Param('id') id: string) {
-    return this.goalService.findOne(id);
+  @ApiOperation({
+    summary: 'Get a goal by ID',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Goal found',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Goal not found',
+  })
+  findOne(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ) {
+    return this.goalsService.findOne(req.user.userId, id);
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'Update a goal' })
-  update(@Param('id') id: string, @Body() dto: Partial<CreateGoal>) {
-    return this.goalService.update(id, dto);
+  @ApiOperation({
+    summary: 'Update a goal',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Goal updated successfully',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid update, including target below saved amount',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Goal not found',
+  })
+  update(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: UpdateGoalDto,
+  ) {
+    return this.goalsService.update(req.user.userId, id, dto);
   }
 
   @Post(':id/deposits')
-  @ApiOperation({ summary: 'Add a deposit to a goal' })
+  @ApiOperation({
+    summary: 'Add a deposit to a goal',
+  })
   @ApiResponse({
     status: 201,
-    description: 'Deposit added, savedAmount updated',
+    description: 'Deposit added and saved amount updated',
   })
-  addDeposit(@Param('id') id: string, @Body() dto: CreateGoalDepositDto) {
-    return this.goalService.addDeposit(id, dto);
+  @ApiResponse({
+    status: 400,
+    description: 'Deposit would exceed the goal target',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Goal not found',
+  })
+  addDeposit(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: CreateGoalDepositDto,
+  ) {
+    return this.goalsService.addDeposit(req.user.userId, id, dto);
   }
 
   @Delete('deposits/:depositId')
-  @ApiOperation({ summary: 'Remove a deposit (reverses savedAmount)' })
-  removeDeposit(@Param('depositId') depositId: string) {
-    return this.goalService.removeDeposit(depositId);
+  @ApiOperation({
+    summary: 'Remove a goal deposit',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Deposit removed and saved amount reversed',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Deposit not found',
+  })
+  removeDeposit(
+    @Req() req: AuthenticatedRequest,
+    @Param('depositId', new ParseUUIDPipe())
+    depositId: string,
+  ) {
+    return this.goalsService.removeDeposit(req.user.userId, depositId);
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete a goal' })
-  remove(@Param('id') id: string) {
-    return this.goalService.remove(id);
+  @ApiOperation({
+    summary: 'Delete a goal',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Goal deleted successfully',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Goal not found',
+  })
+  remove(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ) {
+    return this.goalsService.remove(req.user.userId, id);
   }
 }

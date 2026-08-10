@@ -14,7 +14,7 @@ type TransactionUpdateData = {
   type?: TransactionType;
   remark?: string;
   date?: Date;
-  amount?: number;
+  amount?: string | Prisma.Decimal;
   categoryId?: string;
   paymentMethodId?: string;
 };
@@ -36,43 +36,54 @@ export class TransactionService {
       throw new NotFoundException(`Book not found`);
     }
 
-    if (
-      createTransactionDto.amount !== undefined &&
-      createTransactionDto.amount < 0
-    ) {
+    const decimalAmount = new Prisma.Decimal(createTransactionDto.amount);
+
+    if (decimalAmount.isNegative()) {
       throw new BadRequestException('Amount cannot be negative');
     }
 
-    let category = await this.prisma.category.findFirst({
+    if (decimalAmount.isZero()) {
+      throw new BadRequestException('Amount must be greater than zero');
+    }
+
+    const category = await this.prisma.category.findFirst({
       where: {
-        name: createTransactionDto.category,
-        OR: [{ userId: bookExists.userId }, { isDefault: true, userId: null }],
+        id: createTransactionDto.categoryId,
+
+        OR: [
+          {
+            userId: bookExists.userId,
+          },
+          {
+            isDefault: true,
+            userId: null,
+          },
+        ],
       },
     });
 
     if (!category) {
-      category = await this.prisma.category.create({
-        data: {
-          name: createTransactionDto.category,
-          userId: bookExists.userId,
-        },
-      });
+      throw new BadRequestException('Category not found.');
     }
 
-    let paymentMethod = await this.prisma.paymentMethod.findFirst({
+    const paymentMethod = await this.prisma.paymentMethod.findFirst({
       where: {
-        name: createTransactionDto.paymentMethod,
-        OR: [{ userId: bookExists.userId }, { isDefault: true, userId: null }],
+        id: createTransactionDto.paymentMethodId,
+
+        OR: [
+          {
+            userId: bookExists.userId,
+          },
+          {
+            isDefault: true,
+            userId: null,
+          },
+        ],
       },
     });
 
     if (!paymentMethod) {
-      paymentMethod = await this.prisma.paymentMethod.create({
-        data: {
-          name: createTransactionDto.paymentMethod,
-          userId: bookExists.userId,
-        },
-      });
+      throw new BadRequestException('Payment method not found');
     }
 
     try {
@@ -83,8 +94,10 @@ export class TransactionService {
               bookId: createTransactionDto.bookId,
               type: createTransactionDto.type,
               date: new Date(createTransactionDto.date),
-              amount: createTransactionDto.amount || 0.0,
-              remark: createTransactionDto.remark,
+              amount: createTransactionDto.amount
+                ? decimalAmount
+                : new Prisma.Decimal(0),
+              remark: createTransactionDto.remark?.trim(),
               categoryId: category.id,
               paymentMethodId: paymentMethod.id,
             },
@@ -159,6 +172,7 @@ export class TransactionService {
       where.OR = [
         { remark: { contains: search, mode: 'insensitive' } },
         { category: { name: { contains: search, mode: 'insensitive' } } },
+        { paymentMethod: { name: { contains: search, mode: 'insensitive' } } },
       ];
     }
 
@@ -223,16 +237,12 @@ export class TransactionService {
     return { data: transactions, nextCursor, totalIncome, totalExpense };
   }
 
-  async findOne(id: string): Promise<
-    Prisma.TransactionGetPayload<{
-      include: {
-        category: { select: { id: true; name: true } };
-        paymentMethod: { select: { id: true; name: true } };
-      };
-    }>
-  > {
+  async findOne(id: string) {
     const transaction = await this.prisma.transaction.findUnique({
-      where: { id },
+      where: {
+        id,
+      },
+
       include: {
         category: {
           select: {
@@ -240,6 +250,7 @@ export class TransactionService {
             name: true,
           },
         },
+
         paymentMethod: {
           select: {
             id: true,
@@ -248,9 +259,11 @@ export class TransactionService {
         },
       },
     });
+
     if (!transaction) {
       throw new NotFoundException(`Transaction with id ${id} not found`);
     }
+
     return transaction;
   }
 
@@ -266,7 +279,7 @@ export class TransactionService {
 
     if (
       updateTransactionDto.amount !== undefined &&
-      updateTransactionDto.amount < 0
+      new Prisma.Decimal(updateTransactionDto.amount).isNegative()
     ) {
       throw new BadRequestException('Amount cannot be negative');
     }
@@ -277,50 +290,58 @@ export class TransactionService {
       date: updateTransactionDto.date
         ? new Date(updateTransactionDto.date)
         : undefined,
-      amount: updateTransactionDto.amount,
+      amount: updateTransactionDto.amount
+        ? new Prisma.Decimal(updateTransactionDto.amount)
+        : undefined,
     };
 
-    if (updateTransactionDto.category) {
-      let category = await this.prisma.category.findFirst({
+    if (updateTransactionDto.categoryId !== undefined) {
+      const category = await this.prisma.category.findFirst({
         where: {
-          name: updateTransactionDto.category,
+          id: updateTransactionDto.categoryId,
+
           OR: [
-            { userId: existingTransaction.book.userId },
-            { isDefault: true, userId: null },
+            {
+              userId: existingTransaction.book.userId,
+            },
+            {
+              isDefault: true,
+              userId: null,
+            },
           ],
         },
       });
 
       if (!category) {
-        category = await this.prisma.category.create({
-          data: {
-            name: updateTransactionDto.category,
-            userId: existingTransaction.book.userId,
-          },
-        });
+        throw new BadRequestException(
+          'Invalid category or category is not available',
+        );
       }
 
       updateData.categoryId = category.id;
     }
 
-    if (updateTransactionDto.paymentMethod) {
-      let paymentMethod = await this.prisma.paymentMethod.findFirst({
+    if (updateTransactionDto.paymentMethodId !== undefined) {
+      const paymentMethod = await this.prisma.paymentMethod.findFirst({
         where: {
-          name: updateTransactionDto.paymentMethod,
+          id: updateTransactionDto.paymentMethodId,
+
           OR: [
-            { userId: existingTransaction.book.userId },
-            { isDefault: true, userId: null },
+            {
+              userId: existingTransaction.book.userId,
+            },
+            {
+              isDefault: true,
+              userId: null,
+            },
           ],
         },
       });
 
       if (!paymentMethod) {
-        paymentMethod = await this.prisma.paymentMethod.create({
-          data: {
-            name: updateTransactionDto.paymentMethod,
-            userId: existingTransaction.book.userId,
-          },
-        });
+        throw new BadRequestException(
+          'Invalid payment method or payment method is not available',
+        );
       }
 
       updateData.paymentMethodId = paymentMethod.id;

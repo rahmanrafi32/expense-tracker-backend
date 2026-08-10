@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma, TransactionType } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
-import { TransactionType } from '@prisma/client';
 import dayjs from 'dayjs';
 
 @Injectable()
@@ -44,7 +44,7 @@ export class SpendingTrendsService {
       const existing = monthMap.get(monthKey) ?? { total: 0, count: 0 };
 
       monthMap.set(monthKey, {
-        total: existing.total + tx.amount,
+        total: existing.total + new Prisma.Decimal(tx.amount).toNumber(),
         count: existing.count + 1,
       });
     }
@@ -96,6 +96,9 @@ export class SpendingTrendsService {
       return trend.averageMonthly / daysInMonth;
     }
 
-    return (book?.expectedMonthlyExpenses ?? 0) / daysInMonth;
+    return (
+      new Prisma.Decimal(book?.expectedMonthlyExpenses ?? 0).toNumber() /
+      daysInMonth
+    );
   }
 }

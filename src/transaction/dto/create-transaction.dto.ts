@@ -1,8 +1,8 @@
 import {
   IsDateString,
+  IsDecimal,
   IsEnum,
   IsNotEmpty,
-  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
@@ -34,21 +34,41 @@ export class CreateTransactionDto {
 
   @ApiProperty({ example: 100.5, description: 'Transaction amount' })
   @IsNotEmpty({ message: 'Amount is required' })
-  @IsNumber({}, { message: 'Amount must be a valid number' })
-  amount: number;
+  @IsDecimal(
+    { decimal_digits: '0,2', force_decimal: false },
+    {
+      message:
+        'Amount must be a valid decimal number with up to 2 decimal places',
+    },
+  )
+  amount: string;
 
   @ApiProperty({ example: 'Salary for June', required: false })
   @IsOptional()
   @IsString({ message: 'Remark must be a valid string' })
   remark?: string;
 
-  @ApiProperty({ example: 'Salary', required: false })
-  @IsOptional()
-  @IsString({ message: 'Category must be a valid string' })
-  category: string;
+  @ApiProperty({
+    example: '99348009-2d8d-4617-b56a-2871ec12b13d',
+    description: 'Category UUID',
+  })
+  @IsNotEmpty({
+    message: 'Category ID is required',
+  })
+  @IsUUID('all', {
+    message: 'Category ID must be a valid UUID',
+  })
+  categoryId: string;
 
-  @ApiProperty({ example: 'Bank Transfer', required: false })
-  @IsOptional()
-  @IsString({ message: 'Payment method must be a valid string' })
-  paymentMethod: string;
+  @ApiProperty({
+    example: '11111111-2222-4333-8444-555555555555',
+    description: 'Payment method UUID',
+  })
+  @IsNotEmpty({
+    message: 'Payment method ID is required',
+  })
+  @IsUUID('all', {
+    message: 'Payment method ID must be a valid UUID',
+  })
+  paymentMethodId: string;
 }

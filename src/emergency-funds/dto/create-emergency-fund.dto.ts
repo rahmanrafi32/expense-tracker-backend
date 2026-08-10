@@ -1,12 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
   IsDateString,
+  IsDecimal,
   IsEnum,
   IsNotEmpty,
-  IsNumber,
   IsOptional,
-  IsPositive,
   IsString,
+  IsUUID,
 } from 'class-validator';
 
 export enum EmergencyEntryType {
@@ -15,31 +15,55 @@ export enum EmergencyEntryType {
 }
 
 export class CreateEmergencyFundsDto {
-  @ApiProperty()
-  @IsString()
+  @ApiProperty({ example: 'uuid-of-book' })
+  @IsUUID()
   @IsNotEmpty()
   bookId: string;
 
-  @ApiProperty({ enum: EmergencyEntryType })
+  @ApiProperty({
+    enum: EmergencyEntryType,
+    example: EmergencyEntryType.WITHDRAWAL,
+  })
   @IsEnum(EmergencyEntryType)
   type: EmergencyEntryType;
 
-  @ApiProperty()
-  @IsNumber()
-  @IsPositive()
-  amount: number;
+  @ApiProperty({
+    example: '5000.00',
+    description: 'Emergency fund amount',
+  })
+  @IsDecimal({
+    decimal_digits: '0,2',
+    force_decimal: false,
+  })
+  amount: string;
 
-  @ApiProperty()
+  @ApiProperty({
+    example: 'Medical emergency',
+  })
   @IsString()
   @IsNotEmpty()
   remark: string;
 
-  @ApiProperty({ required: false })
-  @IsString()
-  @IsOptional()
-  category?: string;
+  @ApiProperty({
+    example: 'uuid-of-category',
+    description: 'Category ID',
+  })
+  @IsUUID()
+  @IsNotEmpty()
+  categoryId: string;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({
+    example: 'uuid-of-payment-method',
+    description: 'Payment method ID',
+  })
+  @IsUUID()
+  @IsNotEmpty()
+  paymentMethodId: string;
+
+  @ApiProperty({
+    required: false,
+    example: '2026-08-10T10:00:00.000Z',
+  })
   @IsDateString()
   @IsOptional()
   date?: string;

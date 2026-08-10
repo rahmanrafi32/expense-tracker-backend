@@ -3,6 +3,7 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { CreateBookDto } from './dto/create-book.dto';
 import { UpdateBookDto } from './dto/update-book.dto';
@@ -25,7 +26,9 @@ export class BookService {
         name: createBookDto.name,
         userId: createBookDto.userId,
         currency: createBookDto.currency,
-        monthlyIncome: createBookDto.monthlyIncome ?? 0.0,
+        monthlyIncome: createBookDto.monthlyIncome
+          ? new Prisma.Decimal(createBookDto.monthlyIncome)
+          : new Prisma.Decimal(0),
         type: createBookDto.type,
       },
     });
@@ -59,9 +62,19 @@ export class BookService {
         'You are not authorized to update this book',
       );
     }
+    const updateData: Prisma.BookUpdateInput = {};
+    if (updateBookDto.name !== undefined) updateData.name = updateBookDto.name;
+    if (updateBookDto.currency !== undefined)
+      updateData.currency = updateBookDto.currency;
+    if (updateBookDto.monthlyIncome !== undefined)
+      updateData.monthlyIncome = new Prisma.Decimal(
+        updateBookDto.monthlyIncome,
+      );
+    if (updateBookDto.type !== undefined) updateData.type = updateBookDto.type;
+
     return this.prisma.book.update({
       where: { id },
-      data: updateBookDto,
+      data: updateData,
     });
   }
 

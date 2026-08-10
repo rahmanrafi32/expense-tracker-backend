@@ -4,7 +4,7 @@ model Transaction {
   book   Book            @relation(fields: [bookId], references: [id], onDelete: Cascade)
   type   TransactionType
   date   DateTime
-  amount Float           @default(0.00)
+  amount Decimal        @default(0.00) @db.Decimal(14, 2)
   remark String?
 
   categoryId String?

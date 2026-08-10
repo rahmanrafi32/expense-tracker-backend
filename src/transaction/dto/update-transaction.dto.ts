@@ -1,11 +1,12 @@
 import {
   IsDateString,
+  IsDecimal,
   IsEnum,
-  IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
 } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { TransactionType } from '../enums/transaction-type.enum';
 
 export class UpdateTransactionDto {
@@ -28,13 +29,14 @@ export class UpdateTransactionDto {
 
   @IsOptional()
   @ApiProperty({ example: 55.5, required: false })
-  @IsNumber(
-    {},
+  @IsDecimal(
+    { decimal_digits: '0,2', force_decimal: false },
     {
-      message: 'Amount must be a valid number',
+      message:
+        'Amount must be a valid decimal number with up to 2 decimal places',
     },
   )
-  amount?: number;
+  amount?: string;
 
   @IsOptional()
   @ApiProperty({ example: 'Bought coffee', required: false })
@@ -43,17 +45,21 @@ export class UpdateTransactionDto {
   })
   remark?: string;
 
-  @IsOptional()
-  @ApiProperty({ example: 'Food', required: false })
-  @IsString({
-    message: 'Category must be a valid string',
+  @ApiPropertyOptional({
+    example: '99348009-2d8d-4617-b56a-2871ec12b13d',
   })
-  category?: string;
+  @IsOptional()
+  @IsUUID('all', {
+    message: 'Category ID must be a valid UUID',
+  })
+  categoryId?: string;
 
-  @IsOptional()
-  @ApiProperty({ example: 'Cash', required: false })
-  @IsString({
-    message: 'Payment method must be a valid string',
+  @ApiPropertyOptional({
+    example: '11111111-2222-4333-8444-555555555555',
   })
-  paymentMethod?: string;
+  @IsOptional()
+  @IsUUID('all', {
+    message: 'Payment method ID must be a valid UUID',
+  })
+  paymentMethodId?: string;
 }

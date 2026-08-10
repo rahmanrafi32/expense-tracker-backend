@@ -30,8 +30,9 @@ export class ResponseInterceptor implements NestInterceptor {
           return data as Record<string, unknown>;
         }
 
-        const statusCode: number = (res && res.statusCode) || HttpStatus.OK;
-        const defaultMessage = (HttpStatus as any)[statusCode] || 'Success';
+        const statusCode: number = res?.statusCode || HttpStatus.OK;
+        const statusName = HttpStatus[statusCode as unknown as keyof typeof HttpStatus];
+        const defaultMessage = typeof statusName === 'string' ? statusName : 'Success';
 
         return new CommonResponse(true, statusCode, defaultMessage, data);
       }),

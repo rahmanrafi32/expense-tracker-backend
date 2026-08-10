@@ -8,6 +8,7 @@ import {
   Delete,
   Query,
   UseGuards,
+  Req,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
@@ -15,6 +16,7 @@ import { SinkingFundService } from './sinking-funds.service';
 import { CreateSinkingFundDto } from './dto/create-sinking-fund.dto';
 import { UpdateSinkingFundDto } from './dto/update-sinking-fund.dto';
 import { CreateSinkingFundDepositDto } from './dto/create-sinking-fund-deposit.dto';
+import { type AuthenticatedRequest } from '../common';
 
 @Controller('sinking-funds')
 @ApiTags('Sinking Funds')
@@ -31,8 +33,8 @@ export class SinkingFundController {
 
   @Get()
   @ApiOperation({ summary: 'Get all sinking funds for a book' })
-  findAll(@Query('bookId') bookId: string) {
-    return this.sinkingFundService.findAllByBook(bookId);
+  findAll(@Req() req: AuthenticatedRequest, @Query('bookId') bookId: string) {
+    return this.sinkingFundService.findAllByBook(req.user.userId, bookId);
   }
 
   @Get(':id')

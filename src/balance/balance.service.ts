@@ -35,11 +35,11 @@ export class BalanceService {
 
     const totalCashIn = transactions
       .filter((t) => t.type === TransactionType.INCOME)
-      .reduce((sum, t) => sum + t.amount, 0);
+      .reduce((sum, t) => sum + new Prisma.Decimal(t.amount).toNumber(), 0);
 
     const totalCashOut = transactions
       .filter((t) => t.type === TransactionType.EXPENSE)
-      .reduce((sum, t) => sum + t.amount, 0);
+      .reduce((sum, t) => sum + new Prisma.Decimal(t.amount).toNumber(), 0);
 
     const balance = totalCashIn - totalCashOut;
 

@@ -7,6 +7,7 @@ import {
   Delete,
   Query,
   UseGuards,
+  Request,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -17,6 +18,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { EmergencyService } from './emergency-funds.service';
 import { CreateEmergencyFundsDto } from './dto/create-emergency-fund.dto';
+import { type AuthenticatedRequest } from '../common';
 
 @Controller('emergency')
 @ApiTags('Emergency Fund')
@@ -28,19 +30,24 @@ export class EmergencyController {
   @Post()
   @ApiOperation({ summary: 'Log a withdrawal or repayment' })
   @ApiResponse({ status: 201, description: 'Entry created' })
-  create(@Body() dto: CreateEmergencyFundsDto) {
-    return this.emergencyService.create(dto);
+  create(
+    @Request() req: AuthenticatedRequest,
+    @Body() dto: CreateEmergencyFundsDto,
+  ) {
+    return this.emergencyService.create(req.user.userId, dto);
   }
 
   @Get()
   @ApiOperation({ summary: 'Get all emergency entries for a book (paginated)' })
   @ApiResponse({ status: 200, description: 'Paginated entries newest first' })
   findAll(
+    @Request() req: AuthenticatedRequest,
     @Query('bookId') bookId: string,
-    @Query('cursor') cursor?: string,
+    @Query('cursor') cursor: string = '',
     @Query('limit') limit?: string,
   ) {
     return this.emergencyService.findAllByBook(
+      req.user.userId,
       bookId,
       cursor,
       limit ? parseInt(limit, 10) : 20,
@@ -55,13 +62,16 @@ export class EmergencyController {
     status: 200,
     description: 'Summary totals and last withdrawal',
   })
-  getSummary(@Query('bookId') bookId: string) {
-    return this.emergencyService.getSummary(bookId);
+  getSummary(
+    @Request() req: AuthenticatedRequest,
+    @Query('bookId') bookId: string,
+  ) {
+    return this.emergencyService.getSummary(req.user.userId, bookId);
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete an emergency entry' })
-  remove(@Param('id') id: string) {
-    return this.emergencyService.remove(id);
+  remove(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.emergencyService.remove(req.user.userId, id);
   }
 }
