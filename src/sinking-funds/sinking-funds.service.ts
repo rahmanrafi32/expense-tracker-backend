@@ -1,24 +1,29 @@
 import {
+  BadRequestException,
   Injectable,
   NotFoundException,
-  BadRequestException,
 } from '@nestjs/common';
-import { PrismaService } from '../database/prisma.service';
-import { CreateSinkingFundDto } from './dto/create-sinking-fund.dto';
-import { UpdateSinkingFundDto } from './dto/update-sinking-fund.dto';
-import { CreateSinkingFundDepositDto } from './dto/create-sinking-fund-deposit.dto';
 import { Prisma } from '@prisma/client';
 import dayjs from 'dayjs';
 
+import { PrismaService } from '../database/prisma.service';
+import { getRemainingDuration } from '../utils/date-duration';
+import { CreateSinkingFundDto } from './dto/create-sinking-fund.dto';
+import { UpdateSinkingFundDto } from './dto/update-sinking-fund.dto';
+import { CreateSinkingFundDepositDto } from './dto/create-sinking-fund-deposit.dto';
+
 @Injectable()
 export class SinkingFundService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async create(dto: CreateSinkingFundDto) {
     const book = await this.prisma.book.findUnique({
       where: { id: dto.bookId },
     });
-    if (!book) throw new NotFoundException('Book not found');
+
+    if (!book) {
+      throw new NotFoundException('Book not found');
+    }
 
     let category = await this.prisma.category.findFirst({
       where: {
@@ -33,11 +38,12 @@ export class SinkingFundService {
       });
     }
 
-    return this.prisma.sinkingFund.create({
+    const fund = await this.prisma.sinkingFund.create({
       data: {
         bookId: dto.bookId,
         name: dto.name,
-        targetAmount: dto.targetAmount,
+        targetAmount: new Prisma.Decimal(dto.targetAmount),
+        savedAmount: new Prisma.Decimal(0),
         deadline: new Date(dto.deadline),
         categoryId: category.id,
       },
@@ -46,6 +52,8 @@ export class SinkingFundService {
         category: { select: { id: true, name: true } },
       },
     });
+
+    return this.serializeFund(fund);
   }
 
   async findAllByBook(bookId: string) {
@@ -59,23 +67,33 @@ export class SinkingFundService {
     });
 
     const now = dayjs();
-    return funds.map((f) => {
-      const exactMonthsLeft = dayjs(f.deadline).diff(now, 'month', true);
-      const wholeMonthsLeft = Math.max(1, Math.ceil(exactMonthsLeft));
 
-      const remaining = f.targetAmount - f.savedAmount;
+    return funds.map((fund) => {
+      const { exactMonths, months, days } = getRemainingDuration(
+        now,
+        dayjs(fund.deadline),
+      );
+      const difference = fund.targetAmount.minus(fund.savedAmount);
+      const remaining = difference.gt(0) ? difference : new Prisma.Decimal(0);
       const monthlyNeeded =
-        remaining > 0 ? Math.ceil(remaining / wholeMonthsLeft) : 0;
+        exactMonths > 0 && remaining.gt(0)
+          ? remaining.div(exactMonths).ceil()
+          : new Prisma.Decimal(0);
+
+      const progressPct = fund.targetAmount.gt(0)
+        ? Math.min(
+            100,
+            fund.savedAmount.div(fund.targetAmount).mul(100).round().toNumber(),
+          )
+        : 0;
 
       return {
-        ...f,
-        progressPct:
-          f.targetAmount > 0
-            ? Math.round((f.savedAmount / f.targetAmount) * 100)
-            : 0,
-        remaining,
-        monthlyNeeded,
-        monthsLeft: wholeMonthsLeft,
+        ...this.serializeFund(fund),
+        progressPct,
+        remaining: remaining.toFixed(2),
+        monthlyNeeded: monthlyNeeded.toFixed(2),
+        monthsLeft: months,
+        daysLeft: days,
       };
     });
   }
@@ -83,32 +101,65 @@ export class SinkingFundService {
   async findOne(id: string) {
     const fund = await this.prisma.sinkingFund.findUnique({
       where: { id },
-      include: { deposits: { orderBy: { date: 'desc' } } },
+      include: {
+        deposits: { orderBy: { date: 'desc' } },
+        category: { select: { id: true, name: true } },
+      },
     });
-    if (!fund) throw new NotFoundException(`Sinking fund ${id} not found`);
-    return fund;
+
+    if (!fund) {
+      throw new NotFoundException(`Sinking fund ${id} not found`);
+    }
+
+    return this.serializeFund(fund);
   }
 
   async update(id: string, dto: UpdateSinkingFundDto) {
-    await this.findOne(id);
-    return this.prisma.sinkingFund.update({
+    const currentFund = await this.findOne(id);
+
+    if (dto.targetAmount !== undefined) {
+      const targetAmount = new Prisma.Decimal(dto.targetAmount);
+      const savedAmount = new Prisma.Decimal(currentFund.savedAmount);
+
+      if (targetAmount.lt(savedAmount)) {
+        throw new BadRequestException(
+          `Target amount cannot be less than the current saved amount of ${savedAmount.toFixed(2)}`,
+        );
+      }
+    }
+
+    const fund = await this.prisma.sinkingFund.update({
       where: { id },
       data: {
-        ...(dto.name && { name: dto.name }),
-        ...(dto.targetAmount && { targetAmount: dto.targetAmount }),
-        ...(dto.deadline && { deadline: new Date(dto.deadline) }),
-        ...(dto.icon && { icon: dto.icon }),
+        ...(dto.name !== undefined && { name: dto.name }),
+        ...(dto.targetAmount !== undefined && {
+          targetAmount: new Prisma.Decimal(dto.targetAmount),
+        }),
+        ...(dto.deadline !== undefined && {
+          deadline: new Date(dto.deadline),
+        }),
+        ...(dto.icon !== undefined && { icon: dto.icon }),
       },
-      include: { deposits: true },
+      include: {
+        deposits: { orderBy: { date: 'desc' } },
+        category: { select: { id: true, name: true } },
+      },
     });
+
+    return this.serializeFund(fund);
   }
 
   async addDeposit(fundId: string, dto: CreateSinkingFundDepositDto) {
     const fund = await this.findOne(fundId);
+    const amount = new Prisma.Decimal(dto.amount);
+    const newSavedAmount = new Prisma.Decimal(fund.savedAmount).add(amount);
+    const targetAmount = new Prisma.Decimal(fund.targetAmount);
 
-    if (fund.savedAmount + dto.amount > fund.targetAmount) {
+    if (newSavedAmount.gt(targetAmount)) {
       throw new BadRequestException(
-        `Deposit of ${dto.amount} exceeds the remaining target of ${fund.targetAmount - fund.savedAmount}`,
+        `Deposit of ${amount.toFixed(2)} exceeds the remaining target of ${targetAmount
+          .minus(new Prisma.Decimal(fund.savedAmount))
+          .toFixed(2)}`,
       );
     }
 
@@ -116,7 +167,7 @@ export class SinkingFundService {
       const deposit = await tx.sinkingFundDeposit.create({
         data: {
           sinkingFundId: fundId,
-          amount: dto.amount,
+          amount,
           note: dto.note,
           date: dto.date ? new Date(dto.date) : new Date(),
         },
@@ -124,10 +175,10 @@ export class SinkingFundService {
 
       await tx.sinkingFund.update({
         where: { id: fundId },
-        data: { savedAmount: { increment: dto.amount } },
+        data: { savedAmount: { increment: amount } },
       });
 
-      return deposit;
+      return { ...deposit, amount: deposit.amount.toFixed(2) };
     });
   }
 
@@ -135,7 +186,10 @@ export class SinkingFundService {
     const deposit = await this.prisma.sinkingFundDeposit.findUnique({
       where: { id: depositId },
     });
-    if (!deposit) throw new NotFoundException(`Deposit ${depositId} not found`);
+
+    if (!deposit) {
+      throw new NotFoundException(`Deposit ${depositId} not found`);
+    }
 
     return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       await tx.sinkingFundDeposit.delete({ where: { id: depositId } });
@@ -149,6 +203,25 @@ export class SinkingFundService {
 
   async remove(id: string) {
     await this.findOne(id);
-    return this.prisma.sinkingFund.delete({ where: { id } });
+    await this.prisma.sinkingFund.delete({ where: { id } });
+    return { deleted: true };
+  }
+
+  private serializeFund<
+    T extends {
+      targetAmount: Prisma.Decimal;
+      savedAmount: Prisma.Decimal;
+      deposits: Array<{ amount: Prisma.Decimal }>;
+    },
+  >(fund: T) {
+    return {
+      ...fund,
+      targetAmount: fund.targetAmount.toFixed(2),
+      savedAmount: fund.savedAmount.toFixed(2),
+      deposits: fund.deposits.map((deposit) => ({
+        ...deposit,
+        amount: deposit.amount.toFixed(2),
+      })),
+    };
   }
 }

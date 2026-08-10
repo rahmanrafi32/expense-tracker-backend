@@ -82,12 +82,12 @@ export class CashFlowService {
       const deadline = dayjs(fund.deadline).startOf('day');
       if (deadline.isAfter(endDate)) continue;
 
-      const remaining = fund.targetAmount - fund.savedAmount;
-      if (remaining > 0) {
+      const remaining = fund.targetAmount.minus(fund.savedAmount);
+      if (remaining.gt(0)) {
         const dateKey = deadline.format('YYYY-MM-DD');
         sinkingEvents.set(
           dateKey,
-          (sinkingEvents.get(dateKey) || 0) + remaining,
+          (sinkingEvents.get(dateKey) || 0) + remaining.toNumber(),
         );
       }
     }

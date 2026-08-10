@@ -1,7 +1,7 @@
 import {
   IsDateString,
   IsNotEmpty,
-  IsNumber,
+  IsDecimal,
   IsOptional,
   IsString,
   IsUUID,
@@ -21,8 +21,11 @@ export class CreateSinkingFundDto {
 
   @ApiProperty({ example: 15000 })
   @IsNotEmpty()
-  @IsNumber()
-  targetAmount: number;
+  @IsDecimal({
+    decimal_digits: '0,2',
+    force_decimal: false,
+  })
+  targetAmount: string;
 
   @ApiProperty({ example: '2026-11-30' })
   @IsNotEmpty()

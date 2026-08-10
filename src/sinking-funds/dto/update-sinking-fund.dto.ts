@@ -1,4 +1,4 @@
-import { IsDateString, IsNumber, IsOptional, IsString } from 'class-validator';
+import { IsDateString, IsDecimal, IsOptional, IsString } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class UpdateSinkingFundDto {
@@ -9,8 +9,11 @@ export class UpdateSinkingFundDto {
 
   @ApiProperty({ example: 20000, required: false })
   @IsOptional()
-  @IsNumber()
-  targetAmount?: number;
+  @IsDecimal({
+    decimal_digits: '0,2',
+    force_decimal: false,
+  })
+  targetAmount?: string;
 
   @ApiProperty({ example: '2026-12-31', required: false })
   @IsOptional()
