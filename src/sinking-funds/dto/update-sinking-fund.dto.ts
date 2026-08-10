@@ -1,4 +1,10 @@
-import { IsDateString, IsDecimal, IsOptional, IsString } from 'class-validator';
+import {
+  IsDateString,
+  IsDecimal,
+  IsOptional,
+  IsString,
+  IsUUID,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class UpdateSinkingFundDto {
@@ -24,4 +30,15 @@ export class UpdateSinkingFundDto {
   @IsOptional()
   @IsString()
   icon?: string;
+
+  @ApiProperty({
+    example: '99348009-2d8d-4617-b56a-2871ec12b13d',
+    description: 'Category UUID',
+    required: false,
+  })
+  @IsOptional()
+  @IsUUID('all', {
+    message: 'Category ID must be a valid UUID',
+  })
+  categoryId?: string;
 }

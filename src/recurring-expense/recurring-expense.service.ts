@@ -12,7 +12,7 @@ import {
 } from '@prisma/client';
 import { CreateRecurringExpenseDto } from './dto/create-recurring-expense';
 import { UpdateRecurringExpenseDto } from './dto/update-recurring-expense';
-import dayjs from 'dayjs';
+import dayjs, { Dayjs } from 'dayjs';
 import { TransactionType } from '../common';
 import { BalanceService } from '../balance/balance.service';
 
@@ -30,10 +30,10 @@ export class RecurringExpenseService {
     private balanceService: BalanceService,
   ) {}
 
-  async create(dto: CreateRecurringExpenseDto) {
-    const book = await this.prisma.book.findUnique({
-      where: { id: dto.bookId },
-      include: { user: true },
+  async create(userId: string, dto: CreateRecurringExpenseDto) {
+    const book = await this.prisma.book.findFirst({
+      where: { id: dto.bookId, userId },
+      select: { id: true },
     });
     if (!book) throw new NotFoundException('Book not found');
 
@@ -50,7 +50,7 @@ export class RecurringExpenseService {
     const category = await this.prisma.category.findFirst({
       where: {
         id: dto.categoryId,
-        OR: [{ userId: book.userId }, { isDefault: true, userId: null }],
+        OR: [{ userId }, { isDefault: true, userId: null }],
       },
     });
 
@@ -61,7 +61,7 @@ export class RecurringExpenseService {
     const paymentMethod = await this.prisma.paymentMethod.findFirst({
       where: {
         id: dto.paymentMethodId,
-        OR: [{ userId: book.userId }, { isDefault: true, userId: null }],
+        OR: [{ userId }, { isDefault: true, userId: null }],
       },
     });
 
@@ -92,8 +92,45 @@ export class RecurringExpenseService {
       paymentMethod: created.paymentMethod?.name || null,
     };
   }
+  private computeExpenseDisplay(
+    bill: {
+      amount: Prisma.Decimal;
+      frequency: ExpenseFrequency;
+      nextDueDate: Date;
+    },
+    now: Dayjs,
+  ) {
+    const daysUntilDue = dayjs(bill.nextDueDate)
+      .startOf('day')
+      .diff(now, 'day');
 
-  async findAllByBook(bookId: string) {
+    let status: ExpenseStatus;
+    if (daysUntilDue < 0) {
+      status = ExpenseStatus.OVERDUE;
+    } else if (daysUntilDue <= 7) {
+      status = ExpenseStatus.UNPAID;
+    } else {
+      status = ExpenseStatus.PAID;
+    }
+
+    const monthlyEquivalent = new Prisma.Decimal(bill.amount)
+      .div(FREQUENCY_MONTHS[bill.frequency])
+      .toDecimalPlaces(2);
+
+    return {
+      status,
+      monthlyEquivalent: monthlyEquivalent.toNumber(),
+      daysUntilDue,
+    };
+  }
+
+  async findAllByBook(userId: string, bookId: string) {
+    const book = await this.prisma.book.findFirst({
+      where: { id: bookId, userId },
+      select: { id: true },
+    });
+    if (!book) throw new NotFoundException(`Book ${bookId} not found`);
+
     const bills = await this.prisma.reccuringExpenses.findMany({
       where: { bookId },
       orderBy: { nextDueDate: 'asc' },
@@ -105,47 +142,38 @@ export class RecurringExpenseService {
 
     const now = dayjs().startOf('day');
 
-    return bills.map((b) => {
-      const daysUntil = dayjs(b.nextDueDate).diff(now, 'day');
-
-      const monthlyEquivalent = new Prisma.Decimal(b.amount)
-        .div(FREQUENCY_MONTHS[b.frequency])
-        .toNumber();
-
-      let currentStatus: ExpenseStatus;
-      if (daysUntil < 0) {
-        currentStatus = ExpenseStatus.OVERDUE;
-      } else if (daysUntil <= 7) {
-        currentStatus = ExpenseStatus.UNPAID;
-      } else {
-        currentStatus = ExpenseStatus.PAID;
-      }
-
-      return {
-        ...b,
-        status: currentStatus,
-        monthlyEquivalent: Math.round(monthlyEquivalent * 100) / 100,
-        daysUntilDue: daysUntil,
-      };
-    });
+    return bills.map((b) => ({
+      ...b,
+      ...this.computeExpenseDisplay(b, now),
+    }));
   }
 
-  async findOne(id: string) {
-    const expense = await this.prisma.reccuringExpenses.findUnique({
-      where: { id },
+  private async getExpenseOrThrow(userId: string, id: string) {
+    const expense = await this.prisma.reccuringExpenses.findFirst({
+      where: { id, book: { userId } },
       include: { category: { select: { name: true } } },
     });
     if (!expense) throw new NotFoundException(`Bill ${id} not found`);
-    return { ...expense, category: expense.category?.name || null };
+    return expense;
   }
 
-  async update(id: string, dto: UpdateRecurringExpenseDto): Promise<any> {
-    const expense = await this.findOne(id);
-    const book = await this.prisma.book.findUnique({
-      where: { id: expense.bookId },
-      include: { user: true },
-    });
-    if (!book) throw new NotFoundException('Book not found');
+  async findOne(userId: string, id: string) {
+    const expense = await this.getExpenseOrThrow(userId, id);
+    const now = dayjs().startOf('day');
+
+    return {
+      ...expense,
+      category: expense.category?.name || null,
+      ...this.computeExpenseDisplay(expense, now),
+    };
+  }
+
+  async update(
+    userId: string,
+    id: string,
+    dto: UpdateRecurringExpenseDto,
+  ): Promise<any> {
+    await this.getExpenseOrThrow(userId, id);
 
     if (dto.amount !== undefined) {
       const decimalAmount = new Prisma.Decimal(dto.amount);
@@ -170,16 +198,7 @@ export class RecurringExpenseService {
       const category = await this.prisma.category.findFirst({
         where: {
           id: dto.categoryId,
-
-          OR: [
-            {
-              userId: book.userId,
-            },
-            {
-              isDefault: true,
-              userId: null,
-            },
-          ],
+          OR: [{ userId }, { isDefault: true, userId: null }],
         },
       });
 
@@ -194,16 +213,7 @@ export class RecurringExpenseService {
       const paymentMethod = await this.prisma.paymentMethod.findFirst({
         where: {
           id: dto.paymentMethodId,
-
-          OR: [
-            {
-              userId: book.userId,
-            },
-            {
-              isDefault: true,
-              userId: null,
-            },
-          ],
+          OR: [{ userId }, { isDefault: true, userId: null }],
         },
       });
 
@@ -224,8 +234,8 @@ export class RecurringExpenseService {
     });
   }
 
-  async markPaid(id: string): Promise<ReccuringExpenses> {
-    const expense = await this.findOne(id);
+  async markPaid(userId: string, id: string): Promise<ReccuringExpenses> {
+    const expense = await this.getExpenseOrThrow(userId, id);
     const months = FREQUENCY_MONTHS[expense.frequency];
     const nextDueDate = dayjs(expense.nextDueDate).add(months, 'month');
 
@@ -257,12 +267,18 @@ export class RecurringExpenseService {
     });
   }
 
-  async remove(id: string): Promise<ReccuringExpenses> {
-    await this.findOne(id);
+  async remove(userId: string, id: string): Promise<ReccuringExpenses> {
+    await this.getExpenseOrThrow(userId, id);
     return this.prisma.reccuringExpenses.delete({ where: { id } });
   }
 
-  async getSummary(bookId: string) {
+  async getSummary(userId: string, bookId: string) {
+    const book = await this.prisma.book.findFirst({
+      where: { id: bookId, userId },
+      select: { bookTotalAmount: true },
+    });
+    if (!book) throw new NotFoundException(`Book ${bookId} not found`);
+
     const bills = await this.prisma.reccuringExpenses.findMany({
       where: { bookId },
     });
@@ -271,12 +287,12 @@ export class RecurringExpenseService {
 
     const monthlyTotal = bills.reduce(
       (sum, b) =>
-        sum +
-        Math.round(
-          new Prisma.Decimal(b.amount).toNumber() /
-            FREQUENCY_MONTHS[b.frequency],
+        sum.plus(
+          new Prisma.Decimal(b.amount)
+            .div(FREQUENCY_MONTHS[b.frequency])
+            .toDecimalPlaces(2),
         ),
-      0,
+      new Prisma.Decimal(0),
     );
 
     const dueThisMonth = bills.filter((b) => {
@@ -288,8 +304,8 @@ export class RecurringExpenseService {
     });
 
     const dueThisMonthAmount = dueThisMonth.reduce(
-      (s, b) => s + new Prisma.Decimal(b.amount).toNumber(),
-      0,
+      (sum, b) => sum.plus(new Prisma.Decimal(b.amount)),
+      new Prisma.Decimal(0),
     );
 
     const nextDue = bills
@@ -299,28 +315,19 @@ export class RecurringExpenseService {
           dayjs(a.nextDueDate).valueOf() - dayjs(b.nextDueDate).valueOf(),
       )[0];
 
-    const book = await this.prisma.book.findUnique({
-      where: { id: bookId },
-      select: { bookTotalAmount: true },
-    });
-
-    const currentBalance = new Prisma.Decimal(
-      book?.bookTotalAmount ?? 0,
-    ).toNumber();
-    const shortfall = dueThisMonthAmount - currentBalance;
-    const hasShortfall = shortfall > 0;
+    const currentBalance = new Prisma.Decimal(book.bookTotalAmount ?? 0);
+    const shortfallRaw = dueThisMonthAmount.minus(currentBalance);
+    const hasShortfall = shortfallRaw.gt(0);
+    const shortfall = hasShortfall ? shortfallRaw : new Prisma.Decimal(0);
 
     return {
-      monthlyTotal,
+      monthlyTotal: monthlyTotal.toFixed(2),
       dueThisMonthCount: dueThisMonth.length,
-      dueThisMonthAmount: dueThisMonth.reduce(
-        (s, b) => s + new Prisma.Decimal(b.amount).toNumber(),
-        0,
-      ),
+      dueThisMonthAmount: dueThisMonthAmount.toFixed(2),
       nextDue: nextDue
         ? {
             name: nextDue.name,
-            amount: nextDue.amount,
+            amount: new Prisma.Decimal(nextDue.amount).toFixed(2),
             nextDueDate: nextDue.nextDueDate,
             daysUntil: dayjs(nextDue.nextDueDate).diff(
               now.startOf('day'),
@@ -328,13 +335,13 @@ export class RecurringExpenseService {
             ),
           }
         : null,
-      currentBalance,
-      shortfall: hasShortfall ? Math.round(shortfall * 100) / 100 : 0,
+      currentBalance: currentBalance.toFixed(2),
+      shortfall: shortfall.toFixed(2),
       hasShortfall,
       upcomingPayments: dueThisMonth.map((b) => ({
         id: b.id,
         name: b.name,
-        amount: b.amount,
+        amount: new Prisma.Decimal(b.amount).toFixed(2),
         nextDueDate: b.nextDueDate,
       })),
     };

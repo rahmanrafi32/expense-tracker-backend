@@ -8,6 +8,7 @@ import {
   Delete,
   Query,
   UseGuards,
+  Req,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -16,6 +17,8 @@ import {
   ApiResponse,
 } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
+import { type Request } from 'express';
+
 import { RecurringExpenseService } from './recurring-expense.service';
 import { CreateRecurringExpenseDto } from './dto/create-recurring-expense';
 import { UpdateRecurringExpenseDto } from './dto/update-recurring-expense';
@@ -25,61 +28,93 @@ import { UpdateRecurringExpenseDto } from './dto/update-recurring-expense';
 @ApiBearerAuth('jwt')
 @UseGuards(AuthGuard('jwt'))
 export class RecurringExpenseController {
-  constructor(private readonly commitmentService: RecurringExpenseService) {}
+  constructor(
+    private readonly recurringExpenseService: RecurringExpenseService,
+  ) {}
 
   @Post()
   @ApiOperation({ summary: 'Create a recurring expense' })
-  @ApiResponse({ status: 201, description: 'Recurring expense created' })
-  create(@Body() dto: CreateRecurringExpenseDto) {
-    return this.commitmentService.create(dto);
+  @ApiResponse({
+    status: 201,
+    description: 'Recurring expense created',
+  })
+  create(@Req() req: Request, @Body() dto: CreateRecurringExpenseDto) {
+    const userId = (req.user as { id: string }).id;
+
+    return this.recurringExpenseService.create(userId, dto);
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get all recurring-expense for a book' })
+  @ApiOperation({
+    summary: 'Get all recurring expenses for a book',
+  })
   @ApiResponse({
     status: 200,
     description:
-      'List of recurring-expense with monthly equivalent and days until due',
+      'List of recurring expenses with monthly equivalent and days until due',
   })
-  findAll(@Query('bookId') bookId: string) {
-    return this.commitmentService.findAllByBook(bookId);
+  findAll(@Req() req: Request, @Query('bookId') bookId: string) {
+    const userId = (req.user as { id: string }).id;
+
+    return this.recurringExpenseService.findAllByBook(userId, bookId);
   }
 
   @Get('summary')
   @ApiOperation({
-    summary: 'Get recurring-expense summary stats for header cards',
+    summary: 'Get recurring expense summary stats for header cards',
   })
   @ApiResponse({
     status: 200,
-    description: 'Monthly total, due this month, next payment',
+    description:
+      'Monthly total, due this month, next payment, and shortfall information',
   })
-  getSummary(@Query('bookId') bookId: string) {
-    return this.commitmentService.getSummary(bookId);
+  getSummary(@Req() req: Request, @Query('bookId') bookId: string) {
+    const userId = (req.user as { id: string }).id;
+
+    return this.recurringExpenseService.getSummary(userId, bookId);
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get a recurring-expense by id' })
-  findOne(@Param('id') id: string) {
-    return this.commitmentService.findOne(id);
+  @ApiOperation({
+    summary: 'Get a recurring expense by id',
+  })
+  findOne(@Req() req: Request, @Param('id') id: string) {
+    const userId = (req.user as { id: string }).id;
+
+    return this.recurringExpenseService.findOne(userId, id);
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'Update a recurring-expense' })
-  update(@Param('id') id: string, @Body() dto: UpdateRecurringExpenseDto) {
-    return this.commitmentService.update(id, dto);
+  @ApiOperation({
+    summary: 'Update a recurring expense',
+  })
+  update(
+    @Req() req: Request,
+    @Param('id') id: string,
+    @Body() dto: UpdateRecurringExpenseDto,
+  ) {
+    const userId = (req.user as { id: string }).id;
+
+    return this.recurringExpenseService.update(userId, id, dto);
   }
 
   @Patch(':id/mark-paid')
   @ApiOperation({
-    summary: 'Mark recurring-expense as paid and advance next due date',
+    summary: 'Mark recurring expense as paid and advance next due date',
   })
-  markPaid(@Param('id') id: string) {
-    return this.commitmentService.markPaid(id);
+  markPaid(@Req() req: Request, @Param('id') id: string) {
+    const userId = (req.user as { id: string }).id;
+
+    return this.recurringExpenseService.markPaid(userId, id);
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete a recurring-expense' })
-  remove(@Param('id') id: string) {
-    return this.commitmentService.remove(id);
+  @ApiOperation({
+    summary: 'Delete a recurring expense',
+  })
+  remove(@Req() req: Request, @Param('id') id: string) {
+    const userId = (req.user as { id: string }).id;
+
+    return this.recurringExpenseService.remove(userId, id);
   }
 }

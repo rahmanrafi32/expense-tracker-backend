@@ -3,8 +3,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
-import dayjs from 'dayjs';
+import { Prisma, SinkingFund } from '@prisma/client';
+import dayjs, { Dayjs } from 'dayjs';
 
 import { PrismaService } from '../database/prisma.service';
 import { getRemainingDuration } from '../utils/date-duration';
@@ -25,17 +25,15 @@ export class SinkingFundService {
       throw new NotFoundException('Book not found');
     }
 
-    let category = await this.prisma.category.findFirst({
+    const category = await this.prisma.category.findFirst({
       where: {
-        name: dto.category,
+        id: dto.categoryId,
         OR: [{ userId: book.userId }, { isDefault: true, userId: null }],
       },
     });
 
     if (!category) {
-      category = await this.prisma.category.create({
-        data: { name: dto.category, userId: book.userId },
-      });
+      throw new NotFoundException('Category not found');
     }
 
     const fund = await this.prisma.sinkingFund.create({
@@ -82,34 +80,10 @@ export class SinkingFundService {
 
     const now = dayjs().startOf('day');
 
-    return funds.map((fund) => {
-      const { exactMonths, months, days } = getRemainingDuration(
-        now,
-        dayjs(fund.deadline).startOf('day'),
-      );
-      const difference = fund.targetAmount.minus(fund.savedAmount);
-      const remaining = difference.gt(0) ? difference : new Prisma.Decimal(0);
-      const monthlyNeeded =
-        exactMonths > 0 && remaining.gt(0)
-          ? remaining.div(exactMonths).ceil()
-          : new Prisma.Decimal(0);
-
-      const progressPct = fund.targetAmount.gt(0)
-        ? Math.min(
-            100,
-            fund.savedAmount.div(fund.targetAmount).mul(100).round().toNumber(),
-          )
-        : 0;
-
-      return {
-        ...this.serializeFund(fund),
-        progressPct,
-        remaining: remaining.toFixed(2),
-        monthlyNeeded: monthlyNeeded.toFixed(2),
-        monthsLeft: months,
-        daysLeft: days,
-      };
-    });
+    return funds.map((fund) => ({
+      ...this.serializeFund(fund),
+      ...this.computeFundMetrics(fund, now),
+    }));
   }
 
   async findOne(id: string) {
@@ -125,7 +99,12 @@ export class SinkingFundService {
       throw new NotFoundException(`Sinking fund ${id} not found`);
     }
 
-    return this.serializeFund(fund);
+    const now = dayjs().startOf('day');
+
+    return {
+      ...this.serializeFund(fund),
+      ...this.computeFundMetrics(fund, now),
+    };
   }
 
   async update(id: string, dto: UpdateSinkingFundDto) {
@@ -142,17 +121,48 @@ export class SinkingFundService {
       }
     }
 
+    if (dto.categoryId !== undefined) {
+      const book = await this.prisma.book.findUnique({
+        where: { id: currentFund.bookId },
+        select: {
+          userId: true,
+        },
+      });
+
+      if (!book) {
+        throw new NotFoundException('Book not found');
+      }
+
+      const category = await this.prisma.category.findFirst({
+        where: {
+          id: dto.categoryId,
+          OR: [{ userId: book.userId }, { isDefault: true, userId: null }],
+        },
+      });
+
+      if (!category) {
+        throw new NotFoundException('Category not found');
+      }
+    }
+
     const fund = await this.prisma.sinkingFund.update({
       where: { id },
       data: {
         ...(dto.name !== undefined && { name: dto.name }),
+
         ...(dto.targetAmount !== undefined && {
           targetAmount: new Prisma.Decimal(dto.targetAmount),
         }),
+
         ...(dto.deadline !== undefined && {
           deadline: new Date(dto.deadline),
         }),
+
         ...(dto.icon !== undefined && { icon: dto.icon }),
+
+        ...(dto.categoryId !== undefined && {
+          categoryId: dto.categoryId,
+        }),
       },
       include: {
         deposits: { orderBy: { date: 'desc' } },
@@ -192,7 +202,10 @@ export class SinkingFundService {
         data: { savedAmount: { increment: amount } },
       });
 
-      return { ...deposit, amount: deposit.amount.toFixed(2) };
+      return {
+        ...deposit,
+        amount: deposit.amount.toFixed(2),
+      };
     });
   }
 
@@ -206,18 +219,26 @@ export class SinkingFundService {
     }
 
     return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      await tx.sinkingFundDeposit.delete({ where: { id: depositId } });
+      await tx.sinkingFundDeposit.delete({
+        where: { id: depositId },
+      });
+
       await tx.sinkingFund.update({
         where: { id: deposit.sinkingFundId },
         data: { savedAmount: { decrement: deposit.amount } },
       });
+
       return { deleted: true };
     });
   }
 
   async remove(id: string) {
     await this.findOne(id);
-    await this.prisma.sinkingFund.delete({ where: { id } });
+
+    await this.prisma.sinkingFund.delete({
+      where: { id },
+    });
+
     return { deleted: true };
   }
 
@@ -236,6 +257,48 @@ export class SinkingFundService {
         ...deposit,
         amount: deposit.amount.toFixed(2),
       })),
+    };
+  }
+
+  private computeFundMetrics(fund: SinkingFund, now: Dayjs) {
+    const deadline = dayjs(fund.deadline).startOf('day');
+    const { exactMonths, months, days } = getRemainingDuration(now, deadline);
+
+    const totalDaysLeft = Math.max(deadline.diff(now, 'day'), 0);
+
+    const difference = fund.targetAmount.minus(fund.savedAmount);
+
+    const remaining = difference.gt(0) ? difference : new Prisma.Decimal(0);
+
+    let monthlyNeeded = new Prisma.Decimal(0);
+    let dailyNeeded = new Prisma.Decimal(0);
+
+    if (remaining.gt(0)) {
+      if (exactMonths >= 1) {
+        monthlyNeeded = remaining
+          .div(new Prisma.Decimal(exactMonths).toDecimalPlaces(10))
+          .ceil();
+      } else if (totalDaysLeft > 0) {
+        dailyNeeded = remaining.div(totalDaysLeft).ceil();
+      } else {
+        dailyNeeded = remaining;
+      }
+    }
+
+    const progressPct = fund.targetAmount.gt(0)
+      ? Math.min(
+          100,
+          fund.savedAmount.div(fund.targetAmount).mul(100).round().toNumber(),
+        )
+      : 0;
+
+    return {
+      progressPct,
+      remaining: remaining.toFixed(2),
+      monthlyNeeded: monthlyNeeded.toFixed(2),
+      dailyNeeded: dailyNeeded.toFixed(2),
+      monthsLeft: months,
+      daysLeft: days,
     };
   }
 }

@@ -32,8 +32,15 @@ export class CreateSinkingFundDto {
   @IsDateString()
   deadline: string;
 
-  @ApiProperty({ example: 'wrench', required: false })
-  @IsOptional()
-  @IsString()
-  category: string;
+  @ApiProperty({
+    example: '99348009-2d8d-4617-b56a-2871ec12b13d',
+    description: 'Category UUID',
+  })
+  @IsNotEmpty({
+    message: 'Category ID is required',
+  })
+  @IsUUID('all', {
+    message: 'Category ID must be a valid UUID',
+  })
+  categoryId: string;
 }
