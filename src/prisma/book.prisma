@@ -2,9 +2,9 @@ model Book {
   id                      String              @id @default(uuid())
   name                    String
   userId                  String
-  bookTotalAmount         Float               @default(0.00)
-  monthlyIncome           Float               @default(0.00)
-  expectedMonthlyExpenses Float               @default(0.00)
+  bookTotalAmount         Decimal             @default(0.00) @db.Decimal(14, 2)
+  monthlyIncome           Decimal             @default(0.00) @db.Decimal(14, 2)
+  expectedMonthlyExpenses Decimal             @default(0.00) @db.Decimal(14, 2)
   type                    BookType            @default(OPERATING)
   currency                String              @default("BDT")
   user                    User                @relation(fields: [userId], references: [id], onDelete: Cascade)

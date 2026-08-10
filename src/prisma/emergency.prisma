@@ -1,11 +1,14 @@
 model EmergencyFund {
-  id        String            @id @default(uuid())
-  bookId    String
-  book      Book              @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  id     String @id @default(uuid())
+  bookId String
+  book   Book   @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
   type      EmergencyFundType
-  amount    Float
+  amount    Decimal           @db.Decimal(14, 2)
   remark    String
-  category  String            @default("General")
   date      DateTime          @default(now())
   createdAt DateTime          @default(now())
   updatedAt DateTime          @updatedAt
@@ -13,6 +16,7 @@ model EmergencyFund {
   transaction Transaction? @relation("EmergencyFundTransaction")
 
   @@index([bookId])
+  @@index([categoryId])
   @@index([date])
 }
 

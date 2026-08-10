@@ -5,7 +5,7 @@ import {
   MinLength,
   IsOptional,
   IsEnum,
-  IsNumber,
+  IsDecimal,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { BookType } from '@prisma/client';
@@ -47,13 +47,19 @@ export class CreateBookDto {
   currency?: Currency = Currency.BDT;
 
   @ApiProperty({
-    example: 51700,
+    example: '51700',
     description: 'Expected monthly income/deposit for this book',
     required: false,
   })
   @IsOptional()
-  @IsNumber({}, { message: 'Monthly income must be a number' })
-  monthlyIncome?: number;
+  @IsDecimal(
+    { decimal_digits: '0,2', force_decimal: false },
+    {
+      message:
+        'Monthly income must be a valid decimal number with up to 2 decimal places',
+    },
+  )
+  monthlyIncome?: string;
 
   @ApiPropertyOptional({ enum: BookType, default: 'OPERATING' })
   @IsOptional()

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma, TransactionType } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
-import { TransactionType } from '@prisma/client';
 import dayjs from 'dayjs';
 import { MonthlyInsightDto, YearlyInsightDto } from './dto/insights.dto';
 
@@ -23,10 +23,12 @@ export class InsightsService {
       _sum: { amount: true },
     });
 
-    const totalIncome =
-      totals.find((t) => t.type === TransactionType.INCOME)?._sum.amount ?? 0;
-    const totalExpense =
-      totals.find((t) => t.type === TransactionType.EXPENSE)?._sum.amount ?? 0;
+    const totalIncome = new Prisma.Decimal(
+      totals.find((t) => t.type === TransactionType.INCOME)?._sum.amount ?? 0,
+    ).toNumber();
+    const totalExpense = new Prisma.Decimal(
+      totals.find((t) => t.type === TransactionType.EXPENSE)?._sum.amount ?? 0,
+    ).toNumber();
     const netSavings = totalIncome - totalExpense;
     const savingsRate = totalIncome > 0 ? (netSavings / totalIncome) * 100 : 0;
 
@@ -68,12 +70,15 @@ export class InsightsService {
       name: g.categoryId
         ? categoryMap.get(g.categoryId) || 'Uncategorized'
         : 'Uncategorized',
-      value: g._sum.amount ?? 0,
+      value: new Prisma.Decimal(g._sum.amount ?? 0).toNumber(),
     }));
 
     const otherTotal = groupedExpenses
       .slice(5)
-      .reduce((sum, g) => sum + (g._sum.amount ?? 0), 0);
+      .reduce(
+        (sum, g) => sum + new Prisma.Decimal(g._sum.amount ?? 0).toNumber(),
+        0,
+      );
     if (otherTotal > 0) top5.push({ name: 'Other', value: otherTotal });
 
     return top5;
@@ -98,9 +103,13 @@ export class InsightsService {
     for (const tx of transactions) {
       const monthIndex = dayjs(tx.date).month();
       if (tx.type === TransactionType.INCOME) {
-        monthlyData[monthIndex].income += tx.amount;
+        monthlyData[monthIndex].income += new Prisma.Decimal(
+          tx.amount,
+        ).toNumber();
       } else {
-        monthlyData[monthIndex].expense += tx.amount;
+        monthlyData[monthIndex].expense += new Prisma.Decimal(
+          tx.amount,
+        ).toNumber();
       }
     }
 
@@ -129,9 +138,9 @@ export class InsightsService {
 
     for (const tx of transactions) {
       if (tx.recurringExpenseId) {
-        fixed += tx.amount;
+        fixed += new Prisma.Decimal(tx.amount).toNumber();
       } else {
-        variable += tx.amount;
+        variable += new Prisma.Decimal(tx.amount).toNumber();
       }
     }
 
@@ -189,7 +198,7 @@ export class InsightsService {
 
       return {
         name,
-        value: g._sum.amount ?? 0,
+        value: new Prisma.Decimal(g._sum.amount ?? 0).toNumber(),
       };
     });
   }

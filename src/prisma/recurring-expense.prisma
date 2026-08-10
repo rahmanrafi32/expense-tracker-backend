@@ -3,7 +3,7 @@ model ReccuringExpenses {
   bookId          String
   book            Book             @relation(fields: [bookId], references: [id], onDelete: Cascade)
   name            String
-  amount          Float
+  amount          Decimal @db.Decimal(14, 2)
   paymentMethodId String?
   paymentMethod   PaymentMethod?   @relation("RecurringExpensePaymentMethod", fields: [paymentMethodId], references: [id], onDelete: SetNull)
   categoryId      String?

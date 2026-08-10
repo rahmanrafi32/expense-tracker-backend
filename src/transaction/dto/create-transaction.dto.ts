@@ -1,8 +1,8 @@
 import {
   IsDateString,
+  IsDecimal,
   IsEnum,
   IsNotEmpty,
-  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
@@ -34,8 +34,14 @@ export class CreateTransactionDto {
 
   @ApiProperty({ example: 100.5, description: 'Transaction amount' })
   @IsNotEmpty({ message: 'Amount is required' })
-  @IsNumber({}, { message: 'Amount must be a valid number' })
-  amount: number;
+  @IsDecimal(
+    { decimal_digits: '0,2', force_decimal: false },
+    {
+      message:
+        'Amount must be a valid decimal number with up to 2 decimal places',
+    },
+  )
+  amount: string;
 
   @ApiProperty({ example: 'Salary for June', required: false })
   @IsOptional()

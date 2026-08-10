@@ -14,7 +14,7 @@ type TransactionUpdateData = {
   type?: TransactionType;
   remark?: string;
   date?: Date;
-  amount?: number;
+  amount?: string | Prisma.Decimal;
   categoryId?: string;
   paymentMethodId?: string;
 };
@@ -38,7 +38,7 @@ export class TransactionService {
 
     if (
       createTransactionDto.amount !== undefined &&
-      createTransactionDto.amount < 0
+      new Prisma.Decimal(createTransactionDto.amount).isNegative()
     ) {
       throw new BadRequestException('Amount cannot be negative');
     }
@@ -83,7 +83,9 @@ export class TransactionService {
               bookId: createTransactionDto.bookId,
               type: createTransactionDto.type,
               date: new Date(createTransactionDto.date),
-              amount: createTransactionDto.amount || 0.0,
+              amount: createTransactionDto.amount
+                ? new Prisma.Decimal(createTransactionDto.amount)
+                : new Prisma.Decimal(0),
               remark: createTransactionDto.remark,
               categoryId: category.id,
               paymentMethodId: paymentMethod.id,
@@ -266,7 +268,7 @@ export class TransactionService {
 
     if (
       updateTransactionDto.amount !== undefined &&
-      updateTransactionDto.amount < 0
+      new Prisma.Decimal(updateTransactionDto.amount).isNegative()
     ) {
       throw new BadRequestException('Amount cannot be negative');
     }
@@ -277,7 +279,9 @@ export class TransactionService {
       date: updateTransactionDto.date
         ? new Date(updateTransactionDto.date)
         : undefined,
-      amount: updateTransactionDto.amount,
+      amount: updateTransactionDto.amount
+        ? new Prisma.Decimal(updateTransactionDto.amount)
+        : undefined,
     };
 
     if (updateTransactionDto.category) {

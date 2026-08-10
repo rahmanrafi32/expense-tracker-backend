@@ -1,7 +1,7 @@
 import {
   IsDateString,
+  IsDecimal,
   IsEnum,
-  IsNumber,
   IsOptional,
   IsString,
 } from 'class-validator';
@@ -28,13 +28,14 @@ export class UpdateTransactionDto {
 
   @IsOptional()
   @ApiProperty({ example: 55.5, required: false })
-  @IsNumber(
-    {},
+  @IsDecimal(
+    { decimal_digits: '0,2', force_decimal: false },
     {
-      message: 'Amount must be a valid number',
+      message:
+        'Amount must be a valid decimal number with up to 2 decimal places',
     },
   )
-  amount?: number;
+  amount?: string;
 
   @IsOptional()
   @ApiProperty({ example: 'Bought coffee', required: false })

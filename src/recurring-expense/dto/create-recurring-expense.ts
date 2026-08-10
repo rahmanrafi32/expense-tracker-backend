@@ -1,12 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
   IsDate,
+  IsDecimal,
   IsEnum,
   IsNotEmpty,
-  IsNumber,
   IsString,
   IsUUID,
-  Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ExpenseFrequency } from '@prisma/client';
@@ -22,10 +21,15 @@ export class CreateRecurringExpenseDto {
   @IsNotEmpty()
   name: string;
 
-  @ApiProperty({ example: 6352 })
-  @IsNumber()
-  @Min(0)
-  amount: number;
+  @ApiProperty({ example: '6352' })
+  @IsDecimal(
+    { decimal_digits: '0,2', force_decimal: false },
+    {
+      message:
+        'Amount must be a valid decimal number with up to 2 decimal places',
+    },
+  )
+  amount: string;
 
   @ApiProperty({
     enum: ExpenseFrequency,

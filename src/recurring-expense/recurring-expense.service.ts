@@ -59,7 +59,7 @@ export class RecurringExpenseService {
       data: {
         bookId: dto.bookId,
         name: dto.name,
-        amount: dto.amount,
+        amount: new Prisma.Decimal(dto.amount),
         categoryId: category.id,
         paymentMethodId: paymentMethod.id,
         frequency: dto.frequency,
@@ -114,7 +114,10 @@ export class RecurringExpenseService {
         status: currentStatus,
         category: b.category?.name || null,
         paymentMethod: b.paymentMethod?.name || null,
-        monthlyEquivalent: Math.round(b.amount / FREQUENCY_MONTHS[b.frequency]),
+        monthlyEquivalent: Math.round(
+          new Prisma.Decimal(b.amount).toNumber() /
+            FREQUENCY_MONTHS[b.frequency],
+        ),
         daysUntilDue: daysUntil,
       };
     });
@@ -139,7 +142,7 @@ export class RecurringExpenseService {
 
     const data: Prisma.ReccuringExpensesUncheckedUpdateInput = {};
     if (dto.name !== undefined) data.name = dto.name;
-    if (dto.amount !== undefined) data.amount = dto.amount;
+    if (dto.amount !== undefined) data.amount = new Prisma.Decimal(dto.amount);
     if (dto.frequency !== undefined) data.frequency = dto.frequency;
     if (dto.nextDueDate !== undefined) data.nextDueDate = dto.nextDueDate;
 
@@ -236,7 +239,12 @@ export class RecurringExpenseService {
     const endOfMonth = now.endOf('month');
 
     const monthlyTotal = bills.reduce(
-      (sum, b) => sum + Math.round(b.amount / FREQUENCY_MONTHS[b.frequency]),
+      (sum, b) =>
+        sum +
+        Math.round(
+          new Prisma.Decimal(b.amount).toNumber() /
+            FREQUENCY_MONTHS[b.frequency],
+        ),
       0,
     );
 
@@ -248,7 +256,10 @@ export class RecurringExpenseService {
       return isUnpaid && isDueThisMonthOrEarlier;
     });
 
-    const dueThisMonthAmount = dueThisMonth.reduce((s, b) => s + b.amount, 0);
+    const dueThisMonthAmount = dueThisMonth.reduce(
+      (s, b) => s + new Prisma.Decimal(b.amount).toNumber(),
+      0,
+    );
 
     const nextDue = bills
       .filter((b) => !dayjs(b.nextDueDate).isBefore(now.startOf('day')))
@@ -262,14 +273,19 @@ export class RecurringExpenseService {
       select: { bookTotalAmount: true },
     });
 
-    const currentBalance = book?.bookTotalAmount ?? 0;
+    const currentBalance = new Prisma.Decimal(
+      book?.bookTotalAmount ?? 0,
+    ).toNumber();
     const shortfall = dueThisMonthAmount - currentBalance;
     const hasShortfall = shortfall > 0;
 
     return {
       monthlyTotal,
       dueThisMonthCount: dueThisMonth.length,
-      dueThisMonthAmount: dueThisMonth.reduce((s, b) => s + b.amount, 0),
+      dueThisMonthAmount: dueThisMonth.reduce(
+        (s, b) => s + new Prisma.Decimal(b.amount).toNumber(),
+        0,
+      ),
       nextDue: nextDue
         ? {
             name: nextDue.name,

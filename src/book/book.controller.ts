@@ -54,17 +54,20 @@ export class BookController {
   update(
     @Param('id') id: string,
     @Body() updateBookDto: UpdateBookDto,
-    @Request() req: any,
+    @Request() req: { user?: { userId: string } },
   ) {
-    const userId: string = req.user?.userId;
+    const userId: string = req.user?.userId || '';
     return this.bookService.update(id, updateBookDto, userId);
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a book' })
   @ApiResponse({ status: 200, description: 'Deleted book' })
-  remove(@Param('id') id: string, @Request() req: any) {
-    const userId: string = req.user?.userId;
+  remove(
+    @Param('id') id: string,
+    @Request() req: { user?: { userId: string } },
+  ) {
+    const userId: string = req.user?.userId || '';
     return this.bookService.remove(id, userId);
   }
 }
