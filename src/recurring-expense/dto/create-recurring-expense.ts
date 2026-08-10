@@ -38,13 +38,29 @@ export class CreateRecurringExpenseDto {
   @IsEnum(ExpenseFrequency)
   frequency: ExpenseFrequency;
 
-  @IsString()
-  @IsNotEmpty()
-  category: string;
+  @ApiProperty({
+    example: '99348009-2d8d-4617-b56a-2871ec12b13d',
+    description: 'Category UUID',
+  })
+  @IsNotEmpty({
+    message: 'Category ID is required',
+  })
+  @IsUUID('all', {
+    message: 'Category ID must be a valid UUID',
+  })
+  categoryId: string;
 
-  @IsString()
-  @IsNotEmpty()
-  paymentMethod: string;
+  @ApiProperty({
+    example: '11111111-2222-4333-8444-555555555555',
+    description: 'Payment method UUID',
+  })
+  @IsNotEmpty({
+    message: 'Payment method ID is required',
+  })
+  @IsUUID('all', {
+    message: 'Payment method ID must be a valid UUID',
+  })
+  paymentMethodId: string;
 
   @ApiProperty({
     example: '2026-07-30T00:00:00.000Z',

@@ -1,13 +1,17 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
-import { Prisma } from '@prisma/client';
-import { CreateRecurringExpenseDto } from './dto/create-recurring-expense';
-import { UpdateRecurringExpenseDto } from './dto/update-recurring-expense';
 import {
   ExpenseFrequency,
   ExpenseStatus,
+  Prisma,
   ReccuringExpenses,
 } from '@prisma/client';
+import { CreateRecurringExpenseDto } from './dto/create-recurring-expense';
+import { UpdateRecurringExpenseDto } from './dto/update-recurring-expense';
 import dayjs from 'dayjs';
 import { TransactionType } from '../common';
 import { BalanceService } from '../balance/balance.service';
@@ -33,33 +37,43 @@ export class RecurringExpenseService {
     });
     if (!book) throw new NotFoundException('Book not found');
 
-    let category = await this.prisma.category.findFirst({
-      where: {
-        name: dto.category,
-        OR: [{ userId: book.userId }, { isDefault: true, userId: null }],
-      },
-    });
-    if (!category)
-      category = await this.prisma.category.create({
-        data: { name: dto.category, userId: book.userId },
-      });
+    const decimalAmount = new Prisma.Decimal(dto.amount);
 
-    let paymentMethod = await this.prisma.paymentMethod.findFirst({
+    if (decimalAmount.isNegative()) {
+      throw new BadRequestException('Amount cannot be negative');
+    }
+
+    if (decimalAmount.isZero()) {
+      throw new BadRequestException('Amount must be greater than zero');
+    }
+
+    const category = await this.prisma.category.findFirst({
       where: {
-        name: dto.paymentMethod,
+        id: dto.categoryId,
         OR: [{ userId: book.userId }, { isDefault: true, userId: null }],
       },
     });
-    if (!paymentMethod)
-      paymentMethod = await this.prisma.paymentMethod.create({
-        data: { name: dto.paymentMethod, userId: book.userId },
-      });
+
+    if (!category) {
+      throw new BadRequestException('Category not found.');
+    }
+
+    const paymentMethod = await this.prisma.paymentMethod.findFirst({
+      where: {
+        id: dto.paymentMethodId,
+        OR: [{ userId: book.userId }, { isDefault: true, userId: null }],
+      },
+    });
+
+    if (!paymentMethod) {
+      throw new BadRequestException('Payment method not found');
+    }
 
     const created = await this.prisma.reccuringExpenses.create({
       data: {
         bookId: dto.bookId,
         name: dto.name,
-        amount: new Prisma.Decimal(dto.amount),
+        amount: decimalAmount,
         categoryId: category.id,
         paymentMethodId: paymentMethod.id,
         frequency: dto.frequency,
@@ -67,8 +81,8 @@ export class RecurringExpenseService {
         status: ExpenseStatus.UNPAID,
       },
       include: {
-        category: { select: { name: true } },
-        paymentMethod: { select: { name: true } },
+        category: { select: { id: true, name: true } },
+        paymentMethod: { select: { id: true, name: true } },
       },
     });
 
@@ -79,19 +93,13 @@ export class RecurringExpenseService {
     };
   }
 
-  async findAllByBook(
-    bookId: string,
-  ): Promise<
-    Array<
-      ReccuringExpenses & { monthlyEquivalent: number; daysUntilDue: number }
-    >
-  > {
+  async findAllByBook(bookId: string) {
     const bills = await this.prisma.reccuringExpenses.findMany({
       where: { bookId },
       orderBy: { nextDueDate: 'asc' },
       include: {
-        category: { select: { name: true } },
-        paymentMethod: { select: { name: true } },
+        category: { select: { id: true, name: true } },
+        paymentMethod: { select: { id: true, name: true } },
       },
     });
 
@@ -99,6 +107,10 @@ export class RecurringExpenseService {
 
     return bills.map((b) => {
       const daysUntil = dayjs(b.nextDueDate).diff(now, 'day');
+
+      const monthlyEquivalent = new Prisma.Decimal(b.amount)
+        .div(FREQUENCY_MONTHS[b.frequency])
+        .toNumber();
 
       let currentStatus: ExpenseStatus;
       if (daysUntil < 0) {
@@ -112,12 +124,7 @@ export class RecurringExpenseService {
       return {
         ...b,
         status: currentStatus,
-        category: b.category?.name || null,
-        paymentMethod: b.paymentMethod?.name || null,
-        monthlyEquivalent: Math.round(
-          new Prisma.Decimal(b.amount).toNumber() /
-            FREQUENCY_MONTHS[b.frequency],
-        ),
+        monthlyEquivalent: Math.round(monthlyEquivalent * 100) / 100,
         daysUntilDue: daysUntil,
       };
     });
@@ -140,54 +147,81 @@ export class RecurringExpenseService {
     });
     if (!book) throw new NotFoundException('Book not found');
 
+    if (dto.amount !== undefined) {
+      const decimalAmount = new Prisma.Decimal(dto.amount);
+
+      if (decimalAmount.isNegative()) {
+        throw new BadRequestException('Amount cannot be negative');
+      }
+
+      if (decimalAmount.isZero()) {
+        throw new BadRequestException('Amount must be greater than zero');
+      }
+    }
+
     const data: Prisma.ReccuringExpensesUncheckedUpdateInput = {};
-    if (dto.name !== undefined) data.name = dto.name;
+    if (dto.name !== undefined) data.name = dto.name.trim();
     if (dto.amount !== undefined) data.amount = new Prisma.Decimal(dto.amount);
     if (dto.frequency !== undefined) data.frequency = dto.frequency;
-    if (dto.nextDueDate !== undefined) data.nextDueDate = dto.nextDueDate;
+    if (dto.nextDueDate !== undefined)
+      data.nextDueDate = new Date(dto.nextDueDate);
 
-    if (dto.category !== undefined) {
-      let category = await this.prisma.category.findFirst({
+    if (dto.categoryId !== undefined) {
+      const category = await this.prisma.category.findFirst({
         where: {
-          name: dto.category,
-          OR: [{ userId: book.userId }, { isDefault: true, userId: null }],
+          id: dto.categoryId,
+
+          OR: [
+            {
+              userId: book.userId,
+            },
+            {
+              isDefault: true,
+              userId: null,
+            },
+          ],
         },
       });
-      if (!category)
-        category = await this.prisma.category.create({
-          data: { name: dto.category, userId: book.userId },
-        });
+
+      if (!category) {
+        throw new BadRequestException('Category not found.');
+      }
+
       data.categoryId = category.id;
     }
 
-    if (dto.paymentMethod !== undefined) {
-      let paymentMethod = await this.prisma.paymentMethod.findFirst({
+    if (dto.paymentMethodId !== undefined) {
+      const paymentMethod = await this.prisma.paymentMethod.findFirst({
         where: {
-          name: dto.paymentMethod,
-          OR: [{ userId: book.userId }, { isDefault: true, userId: null }],
+          id: dto.paymentMethodId,
+
+          OR: [
+            {
+              userId: book.userId,
+            },
+            {
+              isDefault: true,
+              userId: null,
+            },
+          ],
         },
       });
-      if (!paymentMethod)
-        paymentMethod = await this.prisma.paymentMethod.create({
-          data: { name: dto.paymentMethod, userId: book.userId },
-        });
+
+      if (!paymentMethod) {
+        throw new BadRequestException('Payment method not found.');
+      }
+
       data.paymentMethodId = paymentMethod.id;
     }
 
-    const updated = await this.prisma.reccuringExpenses.update({
+    return await this.prisma.reccuringExpenses.update({
       where: { id },
       data,
       include: {
-        category: { select: { name: true } },
-        paymentMethod: { select: { name: true } },
+        category: { select: { id: true, name: true } },
+        paymentMethod: { select: { id: true, name: true } },
       },
     });
-
-    return {
-      ...updated,
-      category: updated.category?.name || null,
-      paymentMethod: updated.paymentMethod?.name || null,
-    };
   }
 
   async markPaid(id: string): Promise<ReccuringExpenses> {
@@ -204,7 +238,7 @@ export class RecurringExpenseService {
         },
       });
 
-      const transactionData = await tx.transaction.create({
+      await tx.transaction.create({
         data: {
           bookId: expense.bookId,
           type: TransactionType.EXPENSE,
@@ -212,13 +246,10 @@ export class RecurringExpenseService {
           remark: expense.name,
           date: new Date(),
           categoryId: expense.categoryId,
+          paymentMethodId: expense.paymentMethodId,
           recurringExpenseId: id,
         },
       });
-
-      if (expense.categoryId) transactionData.categoryId = expense.categoryId;
-      if (expense.paymentMethodId)
-        transactionData.paymentMethodId = expense.paymentMethodId;
 
       await this.balanceService.updateBookBalance(tx, expense.bookId);
 

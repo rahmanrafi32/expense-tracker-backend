@@ -1,4 +1,4 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsDate,
   IsDecimal,
@@ -6,6 +6,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  IsUUID,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ExpenseFrequency, ExpenseStatus } from '@prisma/client';
@@ -27,13 +28,27 @@ export class UpdateRecurringExpenseDto {
   )
   amount?: string;
 
+  @ApiProperty({
+    example: '99348009-2d8d-4617-b56a-2871ec12b13d',
+    description: 'Category UUID',
+  })
   @IsOptional()
-  @IsString()
-  category?: string;
+  @IsUUID('all', {
+    message: 'Category ID must be a valid UUID',
+  })
+  categoryId?: string;
 
-  @IsString()
-  @IsNotEmpty()
-  paymentMethod: string;
+  @ApiProperty({
+    example: '11111111-2222-4333-8444-555555555555',
+    description: 'Payment method UUID',
+  })
+  @IsNotEmpty({
+    message: 'Payment method ID is required',
+  })
+  @IsUUID('all', {
+    message: 'Payment method ID must be a valid UUID',
+  })
+  paymentMethodId: string;
 
   @ApiPropertyOptional({ enum: ExpenseFrequency })
   @IsOptional()
