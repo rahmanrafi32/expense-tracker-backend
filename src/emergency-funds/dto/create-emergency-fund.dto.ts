@@ -53,6 +53,14 @@ export class CreateEmergencyFundsDto {
   categoryId: string;
 
   @ApiProperty({
+    example: 'uuid-of-payment-method',
+    description: 'Payment method ID',
+  })
+  @IsUUID()
+  @IsNotEmpty()
+  paymentMethodId: string;
+
+  @ApiProperty({
     required: false,
     example: '2026-08-10T10:00:00.000Z',
   })

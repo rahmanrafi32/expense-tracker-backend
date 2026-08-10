@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { EmergencyFundType, Prisma } from '@prisma/client';
 
 import { PrismaService } from '../database/prisma.service';
 import {
@@ -54,6 +54,30 @@ export class EmergencyService {
         throw new NotFoundException(`Category ${dto.categoryId} not found`);
       }
 
+      const paymentMethod = await tx.paymentMethod.findFirst({
+        where: {
+          id: dto.paymentMethodId,
+          OR: [
+            {
+              userId,
+            },
+            {
+              userId: null,
+              isDefault: true,
+            },
+          ],
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      if (!paymentMethod) {
+        throw new NotFoundException(
+          `Payment method ${dto.paymentMethodId} not found`,
+        );
+      }
+
       const amount = new Prisma.Decimal(dto.amount);
 
       if (dto.type === EmergencyEntryType.REPAYMENT) {
@@ -97,6 +121,7 @@ export class EmergencyService {
         data: {
           bookId: dto.bookId,
           categoryId: dto.categoryId,
+          paymentMethodId: dto.paymentMethodId,
           type: dto.type,
           amount,
           remark: dto.remark,
@@ -111,6 +136,12 @@ export class EmergencyService {
               isSystem: true,
             },
           },
+          paymentMethod: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
         },
       });
 
@@ -121,16 +152,15 @@ export class EmergencyService {
           amount,
           remark: dto.remark,
           date: entryDate,
+          categoryId: dto.categoryId,
+          paymentMethodId: dto.paymentMethodId,
           emergencyFundId: entry.id,
         },
       });
 
       await this.updateBookBalance(tx, dto.bookId);
 
-      return {
-        ...entry,
-        amount: entry.amount.toFixed(2),
-      };
+      return this.serializeEntry(entry);
     });
   }
 
@@ -183,6 +213,12 @@ export class EmergencyService {
             isSystem: true,
           },
         },
+        paymentMethod: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
       },
     });
 
@@ -193,10 +229,7 @@ export class EmergencyService {
     const nextCursor = hasNextPage ? (data[data.length - 1]?.id ?? null) : null;
 
     return {
-      data: data.map((entry) => ({
-        ...entry,
-        amount: entry.amount.toFixed(2),
-      })),
+      data: data.map((entry) => this.serializeEntry(entry)),
       nextCursor,
     };
   }
@@ -253,6 +286,12 @@ export class EmergencyService {
             isSystem: true,
           },
         },
+        paymentMethod: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
       },
     });
 
@@ -264,10 +303,7 @@ export class EmergencyService {
       netOwed: netOwed.toFixed(2),
 
       lastWithdrawal: lastWithdrawal
-        ? {
-            ...lastWithdrawal,
-            amount: lastWithdrawal.amount.toFixed(2),
-          }
+        ? this.serializeEntry(lastWithdrawal)
         : null,
     };
   }
@@ -370,6 +406,42 @@ export class EmergencyService {
 
     return {
       balance: totalCashIn.minus(totalCashOut),
+    };
+  }
+
+  private serializeEntry(entry: {
+    id: string;
+    bookId: string;
+    categoryId: string;
+    paymentMethodId: string;
+    type: EmergencyFundType;
+    amount: Prisma.Decimal;
+    remark: string;
+    date: Date;
+    createdAt: Date;
+    updatedAt: Date;
+    category: {
+      id: string;
+      name: string;
+      isIncome: boolean;
+      isSystem: boolean;
+    };
+    paymentMethod: {
+      id: string;
+      name: string;
+    };
+  }) {
+    return {
+      id: entry.id,
+      bookId: entry.bookId,
+      type: entry.type,
+      amount: entry.amount.toFixed(2),
+      remark: entry.remark,
+      date: entry.date,
+      createdAt: entry.createdAt,
+      updatedAt: entry.updatedAt,
+      category: entry.category,
+      paymentMethod: entry.paymentMethod,
     };
   }
 }
