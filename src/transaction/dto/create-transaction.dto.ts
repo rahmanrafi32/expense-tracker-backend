@@ -48,13 +48,27 @@ export class CreateTransactionDto {
   @IsString({ message: 'Remark must be a valid string' })
   remark?: string;
 
-  @ApiProperty({ example: 'Salary', required: false })
-  @IsOptional()
-  @IsString({ message: 'Category must be a valid string' })
-  category: string;
+  @ApiProperty({
+    example: '99348009-2d8d-4617-b56a-2871ec12b13d',
+    description: 'Category UUID',
+  })
+  @IsNotEmpty({
+    message: 'Category ID is required',
+  })
+  @IsUUID('all', {
+    message: 'Category ID must be a valid UUID',
+  })
+  categoryId: string;
 
-  @ApiProperty({ example: 'Bank Transfer', required: false })
-  @IsOptional()
-  @IsString({ message: 'Payment method must be a valid string' })
-  paymentMethod: string;
+  @ApiProperty({
+    example: '11111111-2222-4333-8444-555555555555',
+    description: 'Payment method UUID',
+  })
+  @IsNotEmpty({
+    message: 'Payment method ID is required',
+  })
+  @IsUUID('all', {
+    message: 'Payment method ID must be a valid UUID',
+  })
+  paymentMethodId: string;
 }
