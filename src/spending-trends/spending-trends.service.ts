@@ -7,9 +7,9 @@ import dayjs from 'dayjs';
 export class SpendingTrendsService {
   constructor(private prisma: PrismaService) {}
 
-  async getSpendingTrend(bookId: string, months: number = 3) {
-    const book = await this.prisma.book.findUnique({
-      where: { id: bookId },
+  async getSpendingTrend(userId: string, bookId: string, months: number = 3) {
+    const book = await this.prisma.book.findFirst({
+      where: { id: bookId, userId },
     });
 
     if (!book) throw new NotFoundException('Book not found');
@@ -78,19 +78,22 @@ export class SpendingTrendsService {
   }
 
   async getEffectiveDailyBurnRate(
+    userId: string,
     bookId: string,
     daysInMonth: number,
   ): Promise<number> {
-    const book = await this.prisma.book.findUnique({
-      where: { id: bookId },
+    const book = await this.prisma.book.findFirst({
+      where: { id: bookId, userId },
       select: { expectedMonthlyExpenses: true, type: true },
     });
 
-    if (book?.type === 'ESCROW') {
+    if (!book) throw new NotFoundException('Book not found');
+
+    if (book.type === 'ESCROW') {
       return 0;
     }
 
-    const trend = await this.getSpendingTrend(bookId);
+    const trend = await this.getSpendingTrend(userId, bookId);
 
     if (trend.averageMonthly > 0) {
       return trend.averageMonthly / daysInMonth;

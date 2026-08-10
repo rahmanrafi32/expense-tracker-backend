@@ -16,9 +16,9 @@ import { CreateSinkingFundDepositDto } from './dto/create-sinking-fund-deposit.d
 export class SinkingFundService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(dto: CreateSinkingFundDto) {
-    const book = await this.prisma.book.findUnique({
-      where: { id: dto.bookId },
+  async create(userId: string, dto: CreateSinkingFundDto) {
+    const book = await this.prisma.book.findFirst({
+      where: { id: dto.bookId, userId },
     });
 
     if (!book) {
@@ -86,9 +86,9 @@ export class SinkingFundService {
     }));
   }
 
-  async findOne(id: string) {
-    const fund = await this.prisma.sinkingFund.findUnique({
-      where: { id },
+  async findOne(userId: string, id: string) {
+    const fund = await this.prisma.sinkingFund.findFirst({
+      where: { id, book: { userId } },
       include: {
         deposits: { orderBy: { date: 'desc' } },
         category: { select: { id: true, name: true } },
@@ -107,8 +107,8 @@ export class SinkingFundService {
     };
   }
 
-  async update(id: string, dto: UpdateSinkingFundDto) {
-    const currentFund = await this.findOne(id);
+  async update(userId: string, id: string, dto: UpdateSinkingFundDto) {
+    const currentFund = await this.findOne(userId, id);
 
     if (dto.targetAmount !== undefined) {
       const targetAmount = new Prisma.Decimal(dto.targetAmount);
@@ -122,21 +122,10 @@ export class SinkingFundService {
     }
 
     if (dto.categoryId !== undefined) {
-      const book = await this.prisma.book.findUnique({
-        where: { id: currentFund.bookId },
-        select: {
-          userId: true,
-        },
-      });
-
-      if (!book) {
-        throw new NotFoundException('Book not found');
-      }
-
       const category = await this.prisma.category.findFirst({
         where: {
           id: dto.categoryId,
-          OR: [{ userId: book.userId }, { isDefault: true, userId: null }],
+          OR: [{ userId }, { isDefault: true, userId: null }],
         },
       });
 
@@ -173,8 +162,12 @@ export class SinkingFundService {
     return this.serializeFund(fund);
   }
 
-  async addDeposit(fundId: string, dto: CreateSinkingFundDepositDto) {
-    const fund = await this.findOne(fundId);
+  async addDeposit(
+    userId: string,
+    fundId: string,
+    dto: CreateSinkingFundDepositDto,
+  ) {
+    const fund = await this.findOne(userId, fundId);
     const amount = new Prisma.Decimal(dto.amount);
     const newSavedAmount = new Prisma.Decimal(fund.savedAmount).add(amount);
     const targetAmount = new Prisma.Decimal(fund.targetAmount);
@@ -209,9 +202,9 @@ export class SinkingFundService {
     });
   }
 
-  async removeDeposit(depositId: string) {
-    const deposit = await this.prisma.sinkingFundDeposit.findUnique({
-      where: { id: depositId },
+  async removeDeposit(userId: string, depositId: string) {
+    const deposit = await this.prisma.sinkingFundDeposit.findFirst({
+      where: { id: depositId, sinkingFund: { book: { userId } } },
     });
 
     if (!deposit) {
@@ -232,8 +225,8 @@ export class SinkingFundService {
     });
   }
 
-  async remove(id: string) {
-    await this.findOne(id);
+  async remove(userId: string, id: string) {
+    await this.findOne(userId, id);
 
     await this.prisma.sinkingFund.delete({
       where: { id },

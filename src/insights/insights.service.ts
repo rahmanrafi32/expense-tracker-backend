@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, TransactionType } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import dayjs from 'dayjs';
@@ -14,7 +14,17 @@ export class InsightsService {
     return { startDate, endDate };
   }
 
-  async getMonthlyOverview(dto: MonthlyInsightDto) {
+  private async ensureBookOwnership(userId: string, bookId: string) {
+    const book = await this.prisma.book.findFirst({
+      where: { id: bookId, userId },
+      select: { id: true },
+    });
+
+    if (!book) throw new NotFoundException(`Book ${bookId} not found`);
+  }
+
+  async getMonthlyOverview(userId: string, dto: MonthlyInsightDto) {
+    await this.ensureBookOwnership(userId, dto.bookId);
     const { startDate, endDate } = this.getMonthDateRange(dto.month, dto.year);
 
     const totals = await this.prisma.transaction.groupBy({
@@ -40,7 +50,8 @@ export class InsightsService {
     };
   }
 
-  async getCategoryBreakdown(dto: MonthlyInsightDto) {
+  async getCategoryBreakdown(userId: string, dto: MonthlyInsightDto) {
+    await this.ensureBookOwnership(userId, dto.bookId);
     const { startDate, endDate } = this.getMonthDateRange(dto.month, dto.year);
 
     const groupedExpenses = await this.prisma.transaction.groupBy({
@@ -84,7 +95,8 @@ export class InsightsService {
     return top5;
   }
 
-  async getYearlyTrend(dto: YearlyInsightDto) {
+  async getYearlyTrend(userId: string, dto: YearlyInsightDto) {
+    await this.ensureBookOwnership(userId, dto.bookId);
     const startDate = dayjs(`${dto.year}-01-01`).startOf('year').toDate();
     const endDate = dayjs(`${dto.year}-12-31`).endOf('year').toDate();
 
@@ -121,7 +133,8 @@ export class InsightsService {
     }));
   }
 
-  async getFixedVsVariable(dto: MonthlyInsightDto) {
+  async getFixedVsVariable(userId: string, dto: MonthlyInsightDto) {
+    await this.ensureBookOwnership(userId, dto.bookId);
     const { startDate, endDate } = this.getMonthDateRange(dto.month, dto.year);
 
     const transactions = await this.prisma.transaction.findMany({
@@ -150,7 +163,8 @@ export class InsightsService {
     ];
   }
 
-  async getPaymentMethodBreakdown(dto: MonthlyInsightDto) {
+  async getPaymentMethodBreakdown(userId: string, dto: MonthlyInsightDto) {
+    await this.ensureBookOwnership(userId, dto.bookId);
     const { startDate, endDate } = this.getMonthDateRange(dto.month, dto.year);
 
     const groupedExpenses = await this.prisma.transaction.groupBy({
@@ -203,7 +217,8 @@ export class InsightsService {
     });
   }
 
-  async getTopTransactions(dto: MonthlyInsightDto) {
+  async getTopTransactions(userId: string, dto: MonthlyInsightDto) {
+    await this.ensureBookOwnership(userId, dto.bookId);
     const { startDate, endDate } = this.getMonthDateRange(dto.month, dto.year);
 
     return this.prisma.transaction.findMany({

@@ -9,15 +9,7 @@ import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { TransactionType } from './enums/transaction-type.enum';
 import { Prisma, Transaction } from '@prisma/client';
 import { BalanceService } from '../balance/balance.service';
-
-type TransactionUpdateData = {
-  type?: TransactionType;
-  remark?: string;
-  date?: Date;
-  amount?: string | Prisma.Decimal;
-  categoryId?: string;
-  paymentMethodId?: string;
-};
+import { type TransactionUpdateData } from './types/transaction-update-data.type';
 
 @Injectable()
 export class TransactionService {
@@ -26,10 +18,9 @@ export class TransactionService {
     private balanceService: BalanceService,
   ) {}
 
-  async create(createTransactionDto: CreateTransactionDto) {
-    const bookExists = await this.prisma.book.findUnique({
-      where: { id: createTransactionDto.bookId },
-      include: { user: true },
+  async create(userId: string, createTransactionDto: CreateTransactionDto) {
+    const bookExists = await this.prisma.book.findFirst({
+      where: { id: createTransactionDto.bookId, userId },
     });
 
     if (!bookExists) {
@@ -52,7 +43,7 @@ export class TransactionService {
 
         OR: [
           {
-            userId: bookExists.userId,
+            userId,
           },
           {
             isDefault: true,
@@ -72,7 +63,7 @@ export class TransactionService {
 
         OR: [
           {
-            userId: bookExists.userId,
+            userId,
           },
           {
             isDefault: true,
@@ -149,6 +140,7 @@ export class TransactionService {
   }
 
   async findAllByBook(
+    userId: string,
     bookId: string,
     cursor?: string,
     limit = 10,
@@ -160,6 +152,15 @@ export class TransactionService {
     categoryId?: string,
     paymentMethodId?: string,
   ) {
+    const book = await this.prisma.book.findFirst({
+      where: { id: bookId, userId },
+      select: { id: true },
+    });
+
+    if (!book) {
+      throw new NotFoundException(`Book ${bookId} not found`);
+    }
+
     const where: Prisma.TransactionWhereInput = {
       bookId,
     };
@@ -237,11 +238,9 @@ export class TransactionService {
     return { data: transactions, nextCursor, totalIncome, totalExpense };
   }
 
-  async findOne(id: string) {
-    const transaction = await this.prisma.transaction.findUnique({
-      where: {
-        id,
-      },
+  async findOne(userId: string, id: string) {
+    const transaction = await this.prisma.transaction.findFirst({
+      where: { id, book: { userId } },
 
       include: {
         category: {
@@ -267,10 +266,14 @@ export class TransactionService {
     return transaction;
   }
 
-  async update(id: string, updateTransactionDto: UpdateTransactionDto) {
-    const existingTransaction = await this.prisma.transaction.findUnique({
-      where: { id },
-      include: { book: { include: { user: true } } },
+  async update(
+    userId: string,
+    id: string,
+    updateTransactionDto: UpdateTransactionDto,
+  ) {
+    const existingTransaction = await this.prisma.transaction.findFirst({
+      where: { id, book: { userId } },
+      include: { book: { select: { userId: true } } },
     });
 
     if (!existingTransaction) {
@@ -302,7 +305,7 @@ export class TransactionService {
 
           OR: [
             {
-              userId: existingTransaction.book.userId,
+              userId,
             },
             {
               isDefault: true,
@@ -328,7 +331,7 @@ export class TransactionService {
 
           OR: [
             {
-              userId: existingTransaction.book.userId,
+              userId,
             },
             {
               isDefault: true,
@@ -387,8 +390,8 @@ export class TransactionService {
     });
   }
 
-  async remove(id: string): Promise<Transaction> {
-    const transaction = await this.findOne(id);
+  async remove(userId: string, id: string): Promise<Transaction> {
+    const transaction = await this.findOne(userId, id);
     return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const deletedTransaction = await tx.transaction.delete({
         where: { id },

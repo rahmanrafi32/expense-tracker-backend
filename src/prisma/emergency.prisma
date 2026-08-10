@@ -6,6 +6,9 @@ model EmergencyFund {
   categoryId String
   category   Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
 
+  paymentMethodId String
+  paymentMethod   PaymentMethod @relation("EmergencyFundPaymentMethod", fields: [paymentMethodId], references: [id], onDelete: Restrict)
+
   type      EmergencyFundType
   amount    Decimal           @db.Decimal(14, 2)
   remark    String
@@ -17,6 +20,7 @@ model EmergencyFund {
 
   @@index([bookId])
   @@index([categoryId])
+  @@index([paymentMethodId])
   @@index([date])
 }
 

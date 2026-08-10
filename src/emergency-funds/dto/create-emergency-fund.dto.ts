@@ -8,11 +8,9 @@ import {
   IsString,
   IsUUID,
 } from 'class-validator';
+import { EmergencyEntryType } from '../enums/emergency-entry-type.enum';
 
-export enum EmergencyEntryType {
-  WITHDRAWAL = 'WITHDRAWAL',
-  REPAYMENT = 'REPAYMENT',
-}
+export { EmergencyEntryType } from '../enums/emergency-entry-type.enum';
 
 export class CreateEmergencyFundsDto {
   @ApiProperty({ example: 'uuid-of-book' })
@@ -51,6 +49,14 @@ export class CreateEmergencyFundsDto {
   @IsUUID()
   @IsNotEmpty()
   categoryId: string;
+
+  @ApiProperty({
+    example: 'uuid-of-payment-method',
+    description: 'Payment method ID',
+  })
+  @IsUUID()
+  @IsNotEmpty()
+  paymentMethodId: string;
 
   @ApiProperty({
     required: false,

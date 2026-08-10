@@ -19,19 +19,12 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
-import { Request } from 'express';
 
 import { GoalsService } from './goals.service';
 import { CreateGoalDto } from './dto/create-goal';
 import { UpdateGoalDto } from './dto/update-goal';
 import { CreateGoalDepositDto } from './dto/create-goal-deposit';
-
-interface AuthenticatedRequest extends Request {
-  user: {
-    userId: string;
-    email: string;
-  };
-}
+import { type AuthenticatedRequest } from '../common';
 
 @Controller('goals')
 @ApiTags('Goals')

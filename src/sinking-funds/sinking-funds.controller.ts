@@ -27,8 +27,8 @@ export class SinkingFundController {
 
   @Post()
   @ApiOperation({ summary: 'Create a sinking fund' })
-  create(@Body() dto: CreateSinkingFundDto) {
-    return this.sinkingFundService.create(dto);
+  create(@Req() req: AuthenticatedRequest, @Body() dto: CreateSinkingFundDto) {
+    return this.sinkingFundService.create(req.user.userId, dto);
   }
 
   @Get()
@@ -39,34 +39,42 @@ export class SinkingFundController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a sinking fund by id' })
-  findOne(@Param('id') id: string) {
-    return this.sinkingFundService.findOne(id);
+  findOne(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.sinkingFundService.findOne(req.user.userId, id);
   }
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update a sinking fund' })
-  update(@Param('id') id: string, @Body() dto: UpdateSinkingFundDto) {
-    return this.sinkingFundService.update(id, dto);
+  update(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() dto: UpdateSinkingFundDto,
+  ) {
+    return this.sinkingFundService.update(req.user.userId, id, dto);
   }
 
   @Post(':id/deposits')
   @ApiOperation({ summary: 'Add a deposit to a sinking fund' })
   addDeposit(
+    @Req() req: AuthenticatedRequest,
     @Param('id') id: string,
     @Body() dto: CreateSinkingFundDepositDto,
   ) {
-    return this.sinkingFundService.addDeposit(id, dto);
+    return this.sinkingFundService.addDeposit(req.user.userId, id, dto);
   }
 
   @Delete('deposits/:depositId')
   @ApiOperation({ summary: 'Remove a deposit from a sinking fund' })
-  removeDeposit(@Param('depositId') depositId: string) {
-    return this.sinkingFundService.removeDeposit(depositId);
+  removeDeposit(
+    @Req() req: AuthenticatedRequest,
+    @Param('depositId') depositId: string,
+  ) {
+    return this.sinkingFundService.removeDeposit(req.user.userId, depositId);
   }
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a sinking fund' })
-  remove(@Param('id') id: string) {
-    return this.sinkingFundService.remove(id);
+  remove(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.sinkingFundService.remove(req.user.userId, id);
   }
 }

@@ -17,7 +17,7 @@ import {
   ApiResponse,
 } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
-import { type Request } from 'express';
+import { type AuthenticatedRequest } from '../common';
 
 import { RecurringExpenseService } from './recurring-expense.service';
 import { CreateRecurringExpenseDto } from './dto/create-recurring-expense';
@@ -38,10 +38,11 @@ export class RecurringExpenseController {
     status: 201,
     description: 'Recurring expense created',
   })
-  create(@Req() req: Request, @Body() dto: CreateRecurringExpenseDto) {
-    const userId = (req.user as { id: string }).id;
-
-    return this.recurringExpenseService.create(userId, dto);
+  create(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: CreateRecurringExpenseDto,
+  ) {
+    return this.recurringExpenseService.create(req.user.userId, dto);
   }
 
   @Get()
@@ -53,10 +54,8 @@ export class RecurringExpenseController {
     description:
       'List of recurring expenses with monthly equivalent and days until due',
   })
-  findAll(@Req() req: Request, @Query('bookId') bookId: string) {
-    const userId = (req.user as { id: string }).id;
-
-    return this.recurringExpenseService.findAllByBook(userId, bookId);
+  findAll(@Req() req: AuthenticatedRequest, @Query('bookId') bookId: string) {
+    return this.recurringExpenseService.findAllByBook(req.user.userId, bookId);
   }
 
   @Get('summary')
@@ -68,20 +67,19 @@ export class RecurringExpenseController {
     description:
       'Monthly total, due this month, next payment, and shortfall information',
   })
-  getSummary(@Req() req: Request, @Query('bookId') bookId: string) {
-    const userId = (req.user as { id: string }).id;
-
-    return this.recurringExpenseService.getSummary(userId, bookId);
+  getSummary(
+    @Req() req: AuthenticatedRequest,
+    @Query('bookId') bookId: string,
+  ) {
+    return this.recurringExpenseService.getSummary(req.user.userId, bookId);
   }
 
   @Get(':id')
   @ApiOperation({
     summary: 'Get a recurring expense by id',
   })
-  findOne(@Req() req: Request, @Param('id') id: string) {
-    const userId = (req.user as { id: string }).id;
-
-    return this.recurringExpenseService.findOne(userId, id);
+  findOne(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.recurringExpenseService.findOne(req.user.userId, id);
   }
 
   @Patch(':id')
@@ -89,32 +87,26 @@ export class RecurringExpenseController {
     summary: 'Update a recurring expense',
   })
   update(
-    @Req() req: Request,
+    @Req() req: AuthenticatedRequest,
     @Param('id') id: string,
     @Body() dto: UpdateRecurringExpenseDto,
   ) {
-    const userId = (req.user as { id: string }).id;
-
-    return this.recurringExpenseService.update(userId, id, dto);
+    return this.recurringExpenseService.update(req.user.userId, id, dto);
   }
 
   @Patch(':id/mark-paid')
   @ApiOperation({
     summary: 'Mark recurring expense as paid and advance next due date',
   })
-  markPaid(@Req() req: Request, @Param('id') id: string) {
-    const userId = (req.user as { id: string }).id;
-
-    return this.recurringExpenseService.markPaid(userId, id);
+  markPaid(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.recurringExpenseService.markPaid(req.user.userId, id);
   }
 
   @Delete(':id')
   @ApiOperation({
     summary: 'Delete a recurring expense',
   })
-  remove(@Req() req: Request, @Param('id') id: string) {
-    const userId = (req.user as { id: string }).id;
-
-    return this.recurringExpenseService.remove(userId, id);
+  remove(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.recurringExpenseService.remove(req.user.userId, id);
   }
 }

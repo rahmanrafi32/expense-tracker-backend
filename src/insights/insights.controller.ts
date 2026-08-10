@@ -2,19 +2,31 @@ import {
   Controller,
   Get,
   Query,
+  Req,
+  UseGuards,
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { InsightsService } from './insights.service';
 import { MonthlyInsightDto, YearlyInsightDto } from './dto/insights.dto';
+import { type AuthenticatedRequest } from '../common';
 
 @Controller('insights')
+@ApiTags('Insights')
+@ApiBearerAuth('jwt')
+@UseGuards(AuthGuard('jwt'))
 export class InsightsController {
   constructor(private readonly insightsService: InsightsService) {}
 
   @Get('monthly-dashboard')
   @UsePipes(new ValidationPipe({ transform: true }))
-  async getMonthlyDashboard(@Query() dto: MonthlyInsightDto) {
+  @ApiOperation({ summary: 'Get monthly financial dashboard insights' })
+  async getMonthlyDashboard(
+    @Req() req: AuthenticatedRequest,
+    @Query() dto: MonthlyInsightDto,
+  ) {
     const [
       overview,
       categoryBreakdown,
@@ -22,11 +34,11 @@ export class InsightsController {
       paymentMethods,
       topTransactions,
     ] = await Promise.all([
-      this.insightsService.getMonthlyOverview(dto),
-      this.insightsService.getCategoryBreakdown(dto),
-      this.insightsService.getFixedVsVariable(dto),
-      this.insightsService.getPaymentMethodBreakdown(dto),
-      this.insightsService.getTopTransactions(dto),
+      this.insightsService.getMonthlyOverview(req.user.userId, dto),
+      this.insightsService.getCategoryBreakdown(req.user.userId, dto),
+      this.insightsService.getFixedVsVariable(req.user.userId, dto),
+      this.insightsService.getPaymentMethodBreakdown(req.user.userId, dto),
+      this.insightsService.getTopTransactions(req.user.userId, dto),
     ]);
 
     return {
@@ -40,19 +52,28 @@ export class InsightsController {
 
   @Get('monthly-overview')
   @UsePipes(new ValidationPipe({ transform: true }))
-  async getMonthlyOverview(@Query() dto: MonthlyInsightDto) {
-    return this.insightsService.getMonthlyOverview(dto);
+  async getMonthlyOverview(
+    @Req() req: AuthenticatedRequest,
+    @Query() dto: MonthlyInsightDto,
+  ) {
+    return this.insightsService.getMonthlyOverview(req.user.userId, dto);
   }
 
   @Get('category-breakdown')
   @UsePipes(new ValidationPipe({ transform: true }))
-  async getCategoryBreakdown(@Query() dto: MonthlyInsightDto) {
-    return this.insightsService.getCategoryBreakdown(dto);
+  async getCategoryBreakdown(
+    @Req() req: AuthenticatedRequest,
+    @Query() dto: MonthlyInsightDto,
+  ) {
+    return this.insightsService.getCategoryBreakdown(req.user.userId, dto);
   }
 
   @Get('yearly-trend')
   @UsePipes(new ValidationPipe({ transform: true }))
-  async getYearlyTrend(@Query() dto: YearlyInsightDto) {
-    return this.insightsService.getYearlyTrend(dto);
+  async getYearlyTrend(
+    @Req() req: AuthenticatedRequest,
+    @Query() dto: YearlyInsightDto,
+  ) {
+    return this.insightsService.getYearlyTrend(req.user.userId, dto);
   }
 }
