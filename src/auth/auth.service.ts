@@ -5,8 +5,8 @@ import { PrismaService } from '../database/prisma.service';
 import { compare, genSalt, hash } from 'bcrypt';
 import { CreateUserDto } from '../user/dto/create-user.dto';
 import { CommonResponse } from '../common';
-import { UserValidationResult } from '../common';
-import { TokenUtil } from './token.util';
+import { type UserValidationResult } from './types/auth.types';
+import { TokenUtil } from './utils/token.util';
 import {
   RequestPasswordResetDto,
   ResetPasswordDto,

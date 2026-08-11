@@ -9,14 +9,7 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { BookType } from '@prisma/client';
-
-export enum Currency {
-  USD = 'USD',
-  EUR = 'EUR',
-  GBP = 'GBP',
-  BDT = 'BDT',
-  INR = 'INR',
-}
+import { Currency } from '../enums/currency.enum';
 
 export class CreateBookDto {
   @ApiProperty({ example: 'Monthly Budget', description: 'Name of the book' })

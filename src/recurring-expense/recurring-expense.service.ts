@@ -5,23 +5,17 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import {
-  ExpenseFrequency,
   ExpenseStatus,
   Prisma,
   ReccuringExpenses,
+  TransactionType,
 } from '@prisma/client';
 import { CreateRecurringExpenseDto } from './dto/create-recurring-expense';
 import { UpdateRecurringExpenseDto } from './dto/update-recurring-expense';
 import dayjs, { Dayjs } from 'dayjs';
-import { TransactionType } from '../common';
 import { BalanceService } from '../balance/balance.service';
-
-const FREQUENCY_MONTHS: Record<ExpenseFrequency, number> = {
-  MONTHLY: 1,
-  QUARTERLY: 3,
-  HALF_YEARLY: 6,
-  YEARLY: 12,
-};
+import { EXPENSE_FREQUENCY_MONTHS } from './constants/expense-frequency.constants';
+import { type RecurringExpenseDisplayInput } from './types/recurring-expense-display.type';
 
 @Injectable()
 export class RecurringExpenseService {
@@ -93,12 +87,7 @@ export class RecurringExpenseService {
     };
   }
   private computeExpenseDisplay(
-    bill: {
-      amount: Prisma.Decimal;
-      frequency: ExpenseFrequency;
-      nextDueDate: Date;
-      status: ExpenseStatus;
-    },
+    bill: RecurringExpenseDisplayInput,
     now: Dayjs,
   ) {
     const daysUntilDue = dayjs(bill.nextDueDate)
@@ -116,7 +105,7 @@ export class RecurringExpenseService {
     }
 
     const monthlyEquivalent = new Prisma.Decimal(bill.amount)
-      .div(FREQUENCY_MONTHS[bill.frequency])
+      .div(EXPENSE_FREQUENCY_MONTHS[bill.frequency])
       .toDecimalPlaces(2);
 
     return {
@@ -249,7 +238,7 @@ export class RecurringExpenseService {
 
   async markPaid(userId: string, id: string): Promise<ReccuringExpenses> {
     const expense = await this.getExpenseOrThrow(userId, id);
-    const months = FREQUENCY_MONTHS[expense.frequency];
+    const months = EXPENSE_FREQUENCY_MONTHS[expense.frequency];
     const nextDueDate = dayjs(expense.nextDueDate).add(months, 'month');
 
     return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
@@ -302,7 +291,7 @@ export class RecurringExpenseService {
       (sum, b) =>
         sum.plus(
           new Prisma.Decimal(b.amount)
-            .div(FREQUENCY_MONTHS[b.frequency])
+            .div(EXPENSE_FREQUENCY_MONTHS[b.frequency])
             .toDecimalPlaces(2),
         ),
       new Prisma.Decimal(0),

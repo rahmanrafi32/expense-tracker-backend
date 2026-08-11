@@ -23,7 +23,8 @@ import { CategoryService } from './category.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { AuthGuard } from '@nestjs/passport';
-import * as types from '../common';
+import { type Category } from '@prisma/client';
+import { type AuthenticatedRequest } from '../common';
 
 @Controller('categories')
 @ApiTags('Categories')
@@ -39,9 +40,9 @@ export class CategoryController {
     description: 'List of categories',
   })
   async getCategoriesForUser(
-    @Request() req: types.AuthenticatedRequest,
+    @Request() req: AuthenticatedRequest,
     @Query('isIncome') isIncome?: string,
-  ): Promise<types.Category[]> {
+  ): Promise<Category[]> {
     const parsedIsIncome =
       isIncome === 'true' ? true : isIncome === 'false' ? false : undefined;
     return this.categoryService.getCategoriesForUser(
@@ -57,8 +58,8 @@ export class CategoryController {
     description: 'List of user-specific categories',
   })
   async getUserSpecificCategories(
-    @Request() req: types.AuthenticatedRequest,
-  ): Promise<types.Category[]> {
+    @Request() req: AuthenticatedRequest,
+  ): Promise<Category[]> {
     return this.categoryService.getUserSpecificCategories(req.user.userId);
   }
 
@@ -68,7 +69,7 @@ export class CategoryController {
     status: 200,
     description: 'List of default categories',
   })
-  async getDefaultCategories(): Promise<types.Category[]> {
+  async getDefaultCategories(): Promise<Category[]> {
     return this.categoryService.getDefaultCategories();
   }
 
@@ -78,7 +79,7 @@ export class CategoryController {
     status: 200,
     description: 'List of system categories',
   })
-  async getSystemCategories(): Promise<types.Category[]> {
+  async getSystemCategories(): Promise<Category[]> {
     return this.categoryService.getSystemCategories();
   }
 
@@ -93,9 +94,9 @@ export class CategoryController {
     description: 'Category with this name already exists',
   })
   async createUserCategory(
-    @Request() req: types.AuthenticatedRequest,
+    @Request() req: AuthenticatedRequest,
     @Body() createCategoryDto: CreateCategoryDto,
-  ): Promise<types.Category> {
+  ): Promise<Category> {
     return this.categoryService.createUserCategory(
       req.user.userId,
       createCategoryDto,
@@ -118,10 +119,10 @@ export class CategoryController {
     description: 'Category with this name already exists',
   })
   async updateUserCategory(
-    @Request() req: types.AuthenticatedRequest,
+    @Request() req: AuthenticatedRequest,
     @Param('id') categoryId: string,
     @Body() updateData: UpdateCategoryDto,
-  ): Promise<types.Category> {
+  ): Promise<Category> {
     return this.categoryService.updateUserCategory(
       req.user.userId,
       categoryId,
@@ -143,7 +144,7 @@ export class CategoryController {
     description: 'Cannot delete category used in transactions',
   })
   async deleteUserCategory(
-    @Request() req: types.AuthenticatedRequest,
+    @Request() req: AuthenticatedRequest,
     @Param('id') categoryId: string,
   ): Promise<void> {
     await this.categoryService.deleteUserCategory(req.user.userId, categoryId);

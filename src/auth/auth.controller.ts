@@ -10,7 +10,10 @@ import { AuthService } from './auth.service';
 import { CreateUserDto } from '../user/dto/create-user.dto';
 import { AuthGuard } from '@nestjs/passport';
 import { CommonResponse } from '../common';
-import * as types from '../common';
+import {
+  type UserLoginCredentials,
+  type UserValidationResult,
+} from './types/auth.types';
 import {
   RequestPasswordResetDto,
   ResetPasswordDto,
@@ -28,10 +31,8 @@ export class AuthController {
     status: 200,
     description: 'Returns access and refresh tokens',
   })
-  async login(
-    @Body() body: types.UserLoginCredentials,
-  ): Promise<CommonResponse> {
-    const user: types.UserValidationResult | null =
+  async login(@Body() body: UserLoginCredentials): Promise<CommonResponse> {
+    const user: UserValidationResult | null =
       await this.authService.validateUser(body.email, body.password);
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');

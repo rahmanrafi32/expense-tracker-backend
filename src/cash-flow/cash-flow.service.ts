@@ -4,6 +4,7 @@ import { PrismaService } from '../database/prisma.service';
 import { SpendingTrendsService } from '../spending-trends/spending-trends.service';
 import { GetCashFlowDto, CashFlowDayDto } from './dto/cash-flow-query.dto';
 import dayjs from 'dayjs';
+import { EXPENSE_FREQUENCY_MONTHS } from '../recurring-expense/constants/expense-frequency.constants';
 
 @Injectable()
 export class CashFlowService {
@@ -12,10 +13,13 @@ export class CashFlowService {
     private readonly spendingTrendsService: SpendingTrendsService,
   ) {}
 
-  async getTimeline(dto: GetCashFlowDto): Promise<CashFlowDayDto[]> {
+  async getTimeline(
+    userId: string,
+    dto: GetCashFlowDto,
+  ): Promise<CashFlowDayDto[]> {
     const daysToProject = dto.days || 90;
-    const book = await this.prisma.book.findUnique({
-      where: { id: dto.bookId },
+    const book = await this.prisma.book.findFirst({
+      where: { id: dto.bookId, userId },
     });
 
     if (!book) throw new NotFoundException('Book not found');
@@ -25,6 +29,7 @@ export class CashFlowService {
     const timeline: CashFlowDayDto[] = [];
 
     const spendingTrend = await this.spendingTrendsService.getSpendingTrend(
+      userId,
       dto.bookId,
     );
 
@@ -73,14 +78,8 @@ export class CashFlowService {
             new Prisma.Decimal(bill.amount).toNumber(),
         );
 
-        const monthsToAdd: Record<string, number> = {
-          MONTHLY: 1,
-          QUARTERLY: 3,
-          HALF_YEARLY: 6,
-          YEARLY: 12,
-        };
         billDueDate = billDueDate.add(
-          monthsToAdd[bill.frequency] || 1,
+          EXPENSE_FREQUENCY_MONTHS[bill.frequency],
           'month',
         );
       }

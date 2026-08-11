@@ -1,10 +1,5 @@
 import { Dayjs } from 'dayjs';
-
-export interface RemainingDuration {
-  exactMonths: number;
-  months: number;
-  days: number;
-}
+import { type RemainingDuration } from '../common/types/remaining-duration.type';
 
 export function getRemainingDuration(
   from: Dayjs,

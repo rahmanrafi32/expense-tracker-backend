@@ -1,6 +1,6 @@
 import { IsOptional, IsString, IsEnum, IsDecimal } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Currency } from './create-book.dto';
+import { Currency } from '../enums/currency.enum';
 import { BookType } from '@prisma/client';
 
 export class UpdateBookDto {

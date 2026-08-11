@@ -21,7 +21,8 @@ import { PaymentMethodService } from './payment-method.service';
 import { CreatePaymentMethodDto } from './dto/create-payment-method.dto';
 import { UpdatePaymentMethodDto } from './dto/update-payment-method.dto';
 import { AuthGuard } from '@nestjs/passport';
-import * as types from '../common';
+import { type PaymentMethod } from '@prisma/client';
+import { type AuthenticatedRequest } from '../common';
 
 @Controller('payment-methods')
 @ApiTags('Payment Methods')
@@ -34,8 +35,8 @@ export class PaymentMethodController {
   @ApiOperation({ summary: 'Get payment methods (system + default + user)' })
   @ApiResponse({ status: 200, description: 'List of payment methods' })
   async getPaymentMethodsForUser(
-    @Request() req: types.AuthenticatedRequest,
-  ): Promise<types.PaymentMethod[]> {
+    @Request() req: AuthenticatedRequest,
+  ): Promise<PaymentMethod[]> {
     return this.paymentMethodService.getPaymentMethodsForUser(req.user.userId);
   }
 
@@ -46,8 +47,8 @@ export class PaymentMethodController {
     description: 'List of user-specific payment methods',
   })
   async getUserSpecificPaymentMethods(
-    @Request() req: types.AuthenticatedRequest,
-  ): Promise<types.PaymentMethod[]> {
+    @Request() req: AuthenticatedRequest,
+  ): Promise<PaymentMethod[]> {
     return this.paymentMethodService.getUserSpecificPaymentMethods(
       req.user.userId,
     );
@@ -61,9 +62,9 @@ export class PaymentMethodController {
     description: 'Payment method with this name already exists',
   })
   async createUserPaymentMethod(
-    @Request() req: types.AuthenticatedRequest,
+    @Request() req: AuthenticatedRequest,
     @Body() createPaymentMethodDto: CreatePaymentMethodDto,
-  ): Promise<types.PaymentMethod> {
+  ): Promise<PaymentMethod> {
     return this.paymentMethodService.createUserPaymentMethod(
       req.user.userId,
       createPaymentMethodDto,
@@ -82,10 +83,10 @@ export class PaymentMethodController {
     description: 'Payment method with this name already exists',
   })
   async updateUserPaymentMethod(
-    @Request() req: types.AuthenticatedRequest,
+    @Request() req: AuthenticatedRequest,
     @Param('id') paymentMethodId: string,
     @Body() updateData: UpdatePaymentMethodDto,
-  ): Promise<types.PaymentMethod> {
+  ): Promise<PaymentMethod> {
     return this.paymentMethodService.updateUserPaymentMethod(
       req.user.userId,
       paymentMethodId,
@@ -106,7 +107,7 @@ export class PaymentMethodController {
     description: 'Cannot delete payment method used in transactions',
   })
   async deleteUserPaymentMethod(
-    @Request() req: types.AuthenticatedRequest,
+    @Request() req: AuthenticatedRequest,
     @Param('id') paymentMethodId: string,
   ): Promise<void> {
     await this.paymentMethodService.deleteUserPaymentMethod(

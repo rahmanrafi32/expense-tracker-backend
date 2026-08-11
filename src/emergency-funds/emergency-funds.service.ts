@@ -3,14 +3,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { EmergencyFundType, Prisma } from '@prisma/client';
+import { EmergencyFundType, Prisma, TransactionType } from '@prisma/client';
 
 import { PrismaService } from '../database/prisma.service';
 import {
   CreateEmergencyFundsDto,
   EmergencyEntryType,
 } from './dto/create-emergency-fund.dto';
-import { TransactionType } from '../common';
 
 @Injectable()
 export class EmergencyService {
@@ -23,7 +22,7 @@ export class EmergencyService {
         FROM "Book"
         WHERE id = ${dto.bookId}
           AND "userId" = ${userId}
-        FOR UPDATE
+          FOR UPDATE
       `;
 
       const book = books[0];
@@ -317,19 +316,18 @@ export class EmergencyService {
           transactionId: string | null;
         }[]
       >`
-            SELECT
-              ef.id,
-              ef."bookId",
-              t.id AS "transactionId"
-            FROM "EmergencyFund" ef
-            INNER JOIN "Book" b
-              ON b.id = ef."bookId"
-            LEFT JOIN "Transaction" t
-              ON t."emergencyFundId" = ef.id
-            WHERE ef.id = ${id}
-              AND b."userId" = ${userId}
-            FOR UPDATE OF ef, b
-          `;
+        SELECT ef.id,
+               ef."bookId",
+               t.id AS "transactionId"
+        FROM "EmergencyFund" ef
+               INNER JOIN "Book" b
+                          ON b.id = ef."bookId"
+               LEFT JOIN "Transaction" t
+                         ON t."emergencyFundId" = ef.id
+        WHERE ef.id = ${id}
+          AND b."userId" = ${userId}
+          FOR UPDATE OF ef, b
+      `;
 
       const entry = entries[0];
 
