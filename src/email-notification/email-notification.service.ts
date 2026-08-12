@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Resend } from 'resend';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 @Injectable()
 export class EmailNotificationService {
@@ -13,6 +15,10 @@ export class EmailNotificationService {
   async sendPasswordResetEmail(to: string, resetLink: string) {
     const fromEmail =
       process.env.MAIL_FROM || 'HisabWise <no-reply@minhazurrahman.me>';
+
+    const projectLogo = readFileSync(
+      join(process.cwd(), 'src/assets/project-logo.png'),
+    );
 
     try {
       await this.resend.emails.send({
@@ -74,9 +80,12 @@ export class EmailNotificationService {
           
                     <tr>
                       <td align="center" style="padding-bottom:28px;">
-                        <span class="heading" style="font-size:20px; font-weight:700; letter-spacing:-0.02em; font-family:Arial, Helvetica, sans-serif;">
-                          Hisab<span style="color:#10b981;">Wise</span>
-                        </span>
+                        <img
+                          src="cid:project-logo"
+                          alt="HisabWise"
+                          width="180"
+                          style="display:block; width:180px; height:auto; border:0; outline:none; text-decoration:none;"
+                        />
                       </td>
                     </tr>
           
@@ -144,6 +153,13 @@ export class EmailNotificationService {
             </table>
           </body>
           </html> `,
+        attachments: [
+          {
+            filename: 'project-logo.png',
+            content: projectLogo,
+            contentId: 'project-logo',
+          },
+        ],
       });
       this.logger.log(`Password reset email sent successfully to ${to}`);
     } catch (error) {
