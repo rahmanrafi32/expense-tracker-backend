@@ -36,15 +36,11 @@ const getRefreshTokenMaxAge = (): number => {
 const getCookieSecurityOptions = (): Pick<
   CookieOptions,
   'httpOnly' | 'secure' | 'sameSite'
-> => {
-  const isProduction = process.env.NODE_ENV === 'production';
-
-  return {
-    httpOnly: true,
-    secure: isProduction,
-    sameSite: isProduction ? 'none' : 'lax',
-  };
-};
+> => ({
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax',
+});
 
 export const getAccessTokenCookieOptions = (): CookieOptions => ({
   ...getCookieSecurityOptions(),

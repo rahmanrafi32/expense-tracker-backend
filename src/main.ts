@@ -25,18 +25,32 @@ const csrfProtection = (
   _response: Response,
   next: NextFunction,
 ): void => {
-  if (process.env.NODE_ENV !== 'production') {
+  const stateChangingMethods = ['POST', 'PUT', 'PATCH', 'DELETE'];
+
+  if (!stateChangingMethods.includes(request.method)) {
     next();
     return;
   }
 
-  if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method)) {
+  const fetchSite = request.get('sec-fetch-site');
+  if (fetchSite === 'same-site' || fetchSite === 'same-origin') {
     next();
+    return;
+  }
+
+  if (fetchSite === 'cross-site') {
+    next(new ForbiddenException('Request origin is not allowed'));
     return;
   }
 
   const origin = request.get('origin');
-  if (!origin || !allowedOrigins.has(origin)) {
+
+  if (!origin) {
+    next();
+    return;
+  }
+
+  if (!allowedOrigins.has(origin)) {
     next(new ForbiddenException('Request origin is not allowed'));
     return;
   }
