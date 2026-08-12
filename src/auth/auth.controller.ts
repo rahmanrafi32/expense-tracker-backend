@@ -29,7 +29,7 @@ import {
 
 import type { Response, Request } from 'express';
 import { AuthGuard } from '@nestjs/passport';
-import type { AuthenticatedRequest } from '../common/types/authenticated-request.type';
+import type { AuthenticatedRequest } from '../common';
 
 @Controller('auth')
 @ApiTags('Auth')
