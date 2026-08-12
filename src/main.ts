@@ -7,19 +7,47 @@ import { TransactionModule } from './transaction/transaction.module';
 import { CategoryModule } from './category/category.module';
 import { PaymentMethodModule } from './payment-method/payment-method.module';
 import { ConfigService } from '@nestjs/config';
-import { ValidationPipe } from '@nestjs/common';
+import { ForbiddenException, ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ResponseInterceptor, AllExceptionsFilter } from './common';
+import cookieParser from 'cookie-parser';
+import type { NextFunction, Request, Response } from 'express';
+
+const allowedOrigins = new Set([
+  'https://salmon-forest-0428d1000.7.azurestaticapps.net',
+  'https://expense.minhazurrahman.me',
+  'http://localhost:4173',
+  'http://localhost:5173',
+]);
+
+const csrfProtection = (
+  request: Request,
+  _response: Response,
+  next: NextFunction,
+): void => {
+  if (process.env.NODE_ENV !== 'production') {
+    next();
+    return;
+  }
+
+  if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method)) {
+    next();
+    return;
+  }
+
+  const origin = request.get('origin');
+  if (!origin || !allowedOrigins.has(origin)) {
+    next(new ForbiddenException('Request origin is not allowed'));
+    return;
+  }
+
+  next();
+};
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.enableCors({
-    origin: [
-      'https://salmon-forest-0428d1000.7.azurestaticapps.net',
-      'https://expense.minhazurrahman.me',
-      'http://localhost:4173',
-      'http://localhost:5173',
-    ],
+    origin: [...allowedOrigins],
     credentials: true,
   });
   app.useGlobalPipes(
@@ -31,6 +59,8 @@ async function bootstrap() {
   );
   app.useGlobalInterceptors(new ResponseInterceptor());
   app.useGlobalFilters(new AllExceptionsFilter());
+  app.use(cookieParser());
+  app.use(csrfProtection);
 
   const configService = app.get(ConfigService);
   const port: number = configService.get('PORT') || 3000;

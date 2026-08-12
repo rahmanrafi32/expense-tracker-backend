@@ -1,24 +1,22 @@
 import { ApiProperty } from '@nestjs/swagger';
 
-export class CommonResponse<T = any> {
+export class CommonResponse<T = unknown> {
   @ApiProperty({ example: true })
-  success: boolean;
+  public readonly success: boolean;
 
   @ApiProperty({ example: 200 })
-  statusCode: number;
+  public readonly statusCode: number;
 
   @ApiProperty({ example: 'OK' })
-  message: string;
+  public readonly message: string;
 
   @ApiProperty({ required: false })
-  data?: T;
+  public readonly data?: T;
 
   constructor(success: boolean, statusCode: number, message: string, data?: T) {
     this.success = success;
     this.statusCode = statusCode;
     this.message = message;
-    if (data !== undefined) {
-      this.data = data;
-    }
+    this.data = data;
   }
 }

@@ -5,7 +5,7 @@ import { PrismaService } from '../database/prisma.service';
 import { compare, genSalt, hash } from 'bcrypt';
 import { CreateUserDto } from '../user/dto/create-user.dto';
 import { CommonResponse } from '../common';
-import { type UserValidationResult } from './types/auth.types';
+import { type AuthTokens, type UserValidationResult } from './types/auth.types';
 import { TokenUtil } from './utils/token.util';
 import {
   RequestPasswordResetDto,
@@ -35,33 +35,55 @@ export class AuthService {
     return null;
   }
 
-  async login(user: UserValidationResult): Promise<CommonResponse> {
+  async getUserById(userId: string): Promise<CommonResponse> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        profilePic: true,
+      },
+    });
+
+    if (!user) {
+      return new CommonResponse(false, HttpStatus.NOT_FOUND, 'User not found');
+    }
+
+    return new CommonResponse(
+      true,
+      HttpStatus.OK,
+      'User retrieved successfully',
+      user,
+    );
+  }
+
+  async login(user: UserValidationResult): Promise<CommonResponse<AuthTokens>> {
     try {
       const payload = {
-        email: user.email,
-        id: user.id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        profilePic: user.profilePic,
+        sub: user.id,
       };
       const accessToken = this.jwtService.sign(payload, {
-        secret: process.env.JWT_SECRET || 'your_jwt_secret',
-        expiresIn: (process.env.JWT_EXPIRATION_TIME || '1d') as StringValue,
+        expiresIn: (process.env.JWT_EXPIRATION_TIME || '15m') as StringValue,
       });
       const refreshToken = await this.generateRefreshToken(user.id);
-      return new CommonResponse(true, HttpStatus.OK, 'Login successful', {
-        access_token: accessToken,
-        refresh_token: refreshToken,
-      });
+      return new CommonResponse<AuthTokens>(
+        true,
+        HttpStatus.OK,
+        'Login successful',
+        {
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        },
+      );
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : 'Failed to login';
-      const stack = error instanceof Error ? error.stack : undefined;
       return new CommonResponse(
         false,
         HttpStatus.INTERNAL_SERVER_ERROR,
         message,
-        stack,
       );
     }
   }
@@ -135,20 +157,73 @@ export class AuthService {
     return plainToken;
   }
 
-  async refreshAccessToken(refreshToken: string): Promise<CommonResponse> {
+  async refreshAccessToken(
+    refreshToken: string,
+  ): Promise<CommonResponse<AuthTokens>> {
     try {
       const tokenHash = TokenUtil.hashToken(refreshToken);
 
-      const tokenRecord = await this.prisma.refreshToken.findUnique({
-        where: {
-          tokenHash,
-        },
-        include: {
-          user: true,
-        },
+      const rotation = await this.prisma.$transaction(async (transaction) => {
+        const tokenRecord = await transaction.refreshToken.findUnique({
+          where: {
+            tokenHash,
+          },
+          include: {
+            user: true,
+          },
+        });
+
+        if (!tokenRecord) {
+          return { outcome: 'invalid' as const };
+        }
+
+        if (tokenRecord.expiresAt < new Date()) {
+          await transaction.refreshToken.deleteMany({
+            where: {
+              id: tokenRecord.id,
+            },
+          });
+
+          return { outcome: 'expired' as const };
+        }
+
+        const deletedToken = await transaction.refreshToken.deleteMany({
+          where: {
+            id: tokenRecord.id,
+            tokenHash,
+          },
+        });
+
+        if (deletedToken.count !== 1) {
+          return { outcome: 'invalid' as const };
+        }
+
+        const { plainToken: newRefreshToken, tokenHash: newTokenHash } =
+          TokenUtil.generateRefreshToken();
+        const expirationDays = Number(
+          process.env.JWT_REFRESH_TOKEN_EXPIRATION ?? 7,
+        );
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + expirationDays);
+
+        await transaction.refreshToken.create({
+          data: {
+            userId: tokenRecord.user.id,
+            tokenHash: newTokenHash,
+            expiresAt,
+            userAgent: tokenRecord.userAgent,
+            ipAddress: tokenRecord.ipAddress,
+          },
+        });
+
+        return {
+          outcome: 'success' as const,
+          userId: tokenRecord.user.id,
+          refreshToken: newRefreshToken,
+        };
       });
 
-      if (!tokenRecord) {
+      if (rotation.outcome === 'invalid') {
         return new CommonResponse(
           false,
           HttpStatus.UNAUTHORIZED,
@@ -156,13 +231,7 @@ export class AuthService {
         );
       }
 
-      if (tokenRecord.expiresAt < new Date()) {
-        await this.prisma.refreshToken.delete({
-          where: {
-            id: tokenRecord.id,
-          },
-        });
-
+      if (rotation.outcome === 'expired') {
         return new CommonResponse(
           false,
           HttpStatus.UNAUTHORIZED,
@@ -170,35 +239,21 @@ export class AuthService {
         );
       }
 
-      const newRefreshToken = await this.generateRefreshToken(
-        tokenRecord.user.id,
-        tokenRecord.userAgent ?? undefined,
-        tokenRecord.ipAddress ?? undefined,
-      );
-
-      await this.prisma.refreshToken.delete({
-        where: {
-          id: tokenRecord.id,
-        },
-      });
-
       const payload = {
-        id: tokenRecord.user.id,
-        email: tokenRecord.user.email,
+        sub: rotation.userId,
       };
 
       const accessToken = this.jwtService.sign(payload, {
-        secret: process.env.JWT_SECRET || 'your_jwt_secret',
-        expiresIn: (process.env.JWT_EXPIRATION_TIME || '1d') as StringValue,
+        expiresIn: (process.env.JWT_EXPIRATION_TIME || '15m') as StringValue,
       });
 
-      return new CommonResponse(
+      return new CommonResponse<AuthTokens>(
         true,
         HttpStatus.OK,
         'Token refreshed successfully',
         {
           access_token: accessToken,
-          refresh_token: newRefreshToken,
+          refresh_token: rotation.refreshToken,
         },
       );
     } catch {

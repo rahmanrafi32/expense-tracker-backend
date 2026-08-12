@@ -3,12 +3,15 @@ import {
   Post,
   Body,
   UnauthorizedException,
+  Res,
+  Req,
+  HttpStatus,
+  Get,
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { CreateUserDto } from '../user/dto/create-user.dto';
-import { AuthGuard } from '@nestjs/passport';
 import { CommonResponse } from '../common';
 import {
   type UserLoginCredentials,
@@ -19,25 +22,57 @@ import {
   ResetPasswordDto,
 } from './dto/password-reset.dto';
 import { Throttle } from '@nestjs/throttler';
+import {
+  getAccessTokenCookieOptions,
+  getRefreshTokenCookieOptions,
+} from './utils/cookies.utils';
+
+import type { Response, Request } from 'express';
+import { AuthGuard } from '@nestjs/passport';
+import type { AuthenticatedRequest } from '../common/types/authenticated-request.type';
 
 @Controller('auth')
 @ApiTags('Auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  @Get('me')
+  @UseGuards(AuthGuard('jwt'))
+  async me(@Req() request: AuthenticatedRequest): Promise<CommonResponse> {
+    return this.authService.getUserById(request.user.userId);
+  }
+
   @Post('login')
-  @ApiOperation({ summary: 'Login with email and password' })
-  @ApiResponse({
-    status: 200,
-    description: 'Returns access and refresh tokens',
-  })
-  async login(@Body() body: UserLoginCredentials): Promise<CommonResponse> {
+  async login(
+    @Body() body: UserLoginCredentials,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<CommonResponse> {
     const user: UserValidationResult | null =
       await this.authService.validateUser(body.email, body.password);
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
-    return this.authService.login(user);
+    const result = await this.authService.login(user);
+
+    if (!result.success || !result.data) {
+      return result;
+    }
+
+    const { access_token, refresh_token } = result.data;
+
+    response.cookie(
+      'access_token',
+      access_token,
+      getAccessTokenCookieOptions(),
+    );
+
+    response.cookie(
+      'refresh_token',
+      refresh_token,
+      getRefreshTokenCookieOptions(),
+    );
+
+    return new CommonResponse(true, 200, 'Login successful');
   }
 
   @Post('signup')
@@ -49,27 +84,64 @@ export class AuthController {
 
   @Post('refresh')
   @ApiOperation({ summary: 'Refresh access token using refresh token' })
-  @ApiResponse({ status: 200, description: 'Returns new access token' })
+  @ApiResponse({
+    status: 200,
+    description: 'Access and refresh tokens refreshed successfully',
+  })
   async refresh(
-    @Body('refresh_token') refreshToken: string,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
   ): Promise<CommonResponse> {
+    const refreshToken = this.getCookieValue(request, 'refresh_token');
+
     if (!refreshToken) {
       throw new UnauthorizedException('Refresh token is required');
     }
-    return this.authService.refreshAccessToken(refreshToken);
+
+    const result = await this.authService.refreshAccessToken(refreshToken);
+
+    if (!result.success || !result.data) {
+      if (result.statusCode === 401) {
+        this.clearAuthCookies(response);
+      }
+
+      return result;
+    }
+
+    const { access_token: accessToken, refresh_token: newRefreshToken } =
+      result.data;
+
+    response.cookie('access_token', accessToken, getAccessTokenCookieOptions());
+
+    response.cookie(
+      'refresh_token',
+      newRefreshToken,
+      getRefreshTokenCookieOptions(),
+    );
+
+    return new CommonResponse(
+      true,
+      HttpStatus.OK,
+      'Token refreshed successfully',
+    );
   }
 
-  @UseGuards(AuthGuard('jwt'))
   @Post('logout')
   @ApiOperation({ summary: 'Logout and revoke refresh token' })
   @ApiResponse({ status: 200, description: 'Refresh token revoked' })
   async logout(
-    @Body('refresh_token') refreshToken: string,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
   ): Promise<CommonResponse> {
-    if (!refreshToken) {
-      throw new UnauthorizedException('Refresh token is required');
+    const refreshToken = this.getCookieValue(request, 'refresh_token');
+
+    if (refreshToken) {
+      await this.authService.revokeRefreshToken(refreshToken);
     }
-    return this.authService.revokeRefreshToken(refreshToken);
+
+    this.clearAuthCookies(response);
+
+    return new CommonResponse(true, 200, 'Logged out successfully');
   }
 
   @Throttle({ default: { limit: 2, ttl: 60000 } })
@@ -81,5 +153,21 @@ export class AuthController {
   @Post('reset-password')
   async resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
+  }
+
+  private getCookieValue(request: Request, name: string): string | undefined {
+    const cookies: unknown = request.cookies;
+
+    if (typeof cookies !== 'object' || cookies === null) {
+      return undefined;
+    }
+
+    const value = (cookies as Record<string, unknown>)[name];
+    return typeof value === 'string' ? value : undefined;
+  }
+
+  private clearAuthCookies(response: Response): void {
+    response.clearCookie('access_token', getAccessTokenCookieOptions());
+    response.clearCookie('refresh_token', getRefreshTokenCookieOptions());
   }
 }
