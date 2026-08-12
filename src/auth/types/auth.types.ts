@@ -8,13 +8,11 @@ export interface UserLoginCredentials {
 export type UserValidationResult = Omit<User, 'password'>;
 
 export interface JwtPayload {
-  email: string;
   sub: string;
 }
 
 export interface JwtValidationPayload {
-  id: string;
-  email: string;
+  sub: string;
 }
 
 export interface AuthTokens {
