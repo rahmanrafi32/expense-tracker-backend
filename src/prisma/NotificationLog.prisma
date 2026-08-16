@@ -1,0 +1,19 @@
+model NotificationLog {
+  id             String           @id @default(uuid())
+  userId         String
+  type           NotificationType
+  referenceId    String
+  occurrenceDate DateTime
+  createdAt      DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, type, referenceId, occurrenceDate])
+  @@index([userId])
+}
+
+enum NotificationType {
+  RECURRING_PAYMENT_7_DAY
+  RECURRING_PAYMENT_1_DAY
+  RECURRING_PAYMENT_DUE
+}

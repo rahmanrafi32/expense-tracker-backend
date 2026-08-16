@@ -17,6 +17,7 @@ import { SpendingTrendsModule } from './spending-trends/spending-trends.module';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { EmailNotificationModule } from './email-notification/email-notification.module';
 import { CloudinaryModule } from './cloudinary/cloudinary.module';
+import { CronModule } from './cron/cron.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { CloudinaryModule } from './cloudinary/cloudinary.module';
     SpendingTrendsModule,
     EmailNotificationModule,
     CloudinaryModule,
+    CronModule,
   ],
   controllers: [],
   providers: [],
