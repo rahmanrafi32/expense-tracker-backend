@@ -20,12 +20,15 @@ export class CreateUserDto {
   lastName: string;
 
   @ApiProperty({
-    example: 'https://...',
-    description: 'Profile picture URL',
+    example: 'profile_pictures/hksfgztbos2zbnpis1qh',
+    description: 'Cloudinary public ID of the profile picture',
     required: false,
   })
   @IsOptional()
   @IsString({ message: 'Profile picture must be a string.' })
+  @Matches(/^profile_pictures\/[^/]+$/, {
+    message: 'Profile picture must be a valid Cloudinary public ID.',
+  })
   profilePic?: string;
 
   @ApiProperty({
