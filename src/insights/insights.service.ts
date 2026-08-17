@@ -29,7 +29,12 @@ export class InsightsService {
 
     const totals = await this.prisma.transaction.groupBy({
       by: ['type'],
-      where: { bookId: dto.bookId, date: { gte: startDate, lte: endDate } },
+      where: {
+        bookId: dto.bookId,
+        date: { gte: startDate, lte: endDate },
+        transferIn: null,
+        transferOut: null,
+      },
       _sum: { amount: true },
     });
 
@@ -60,6 +65,8 @@ export class InsightsService {
         bookId: dto.bookId,
         type: TransactionType.EXPENSE,
         date: { gte: startDate, lte: endDate },
+        transferIn: null,
+        transferOut: null,
       },
       _sum: { amount: true },
       orderBy: { _sum: { amount: 'desc' } },
@@ -101,7 +108,12 @@ export class InsightsService {
     const endDate = dayjs(`${dto.year}-12-31`).endOf('year').toDate();
 
     const transactions = await this.prisma.transaction.findMany({
-      where: { bookId: dto.bookId, date: { gte: startDate, lte: endDate } },
+      where: {
+        bookId: dto.bookId,
+        date: { gte: startDate, lte: endDate },
+        transferIn: null,
+        transferOut: null,
+      },
       select: { type: true, amount: true, date: true },
     });
 
@@ -142,6 +154,8 @@ export class InsightsService {
         bookId: dto.bookId,
         type: TransactionType.EXPENSE,
         date: { gte: startDate, lte: endDate },
+        transferIn: null,
+        transferOut: null,
       },
       select: { amount: true, recurringExpenseId: true },
     });
@@ -173,6 +187,8 @@ export class InsightsService {
         bookId: dto.bookId,
         type: TransactionType.EXPENSE,
         date: { gte: startDate, lte: endDate },
+        transferIn: null,
+        transferOut: null,
       },
       _sum: { amount: true },
       orderBy: { _sum: { amount: 'desc' } },
@@ -226,6 +242,8 @@ export class InsightsService {
         bookId: dto.bookId,
         type: TransactionType.EXPENSE,
         date: { gte: startDate, lte: endDate },
+        transferIn: null,
+        transferOut: null,
       },
       orderBy: { amount: 'desc' },
       take: 5,
