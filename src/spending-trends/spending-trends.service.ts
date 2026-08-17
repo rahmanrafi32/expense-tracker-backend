@@ -30,6 +30,8 @@ export class SpendingTrendsService {
         },
         recurringExpenseId: null,
         emergencyFundId: null,
+        transferOut: null,
+        transferIn: null,
       },
       select: {
         amount: true,

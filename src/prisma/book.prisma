@@ -15,6 +15,9 @@ model Book {
   goals                   Goal[]
   emergencyEntries        EmergencyFund[]
   sinkingFunds            SinkingFund[]
+
+  outgoingTransfers Transfer[] @relation("TransferSourceBook")
+  incomingTransfers Transfer[] @relation("TransferTargetBook")
 }
 
 enum BookType {
