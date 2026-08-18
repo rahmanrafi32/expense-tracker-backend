@@ -4,7 +4,7 @@ model Transaction {
   book   Book            @relation(fields: [bookId], references: [id], onDelete: Cascade)
   type   TransactionType
   date   DateTime
-  amount Decimal         @default(0.00) @db.Decimal(14, 2)
+  amount Decimal        @default(0.00) @db.Decimal(14, 2)
   remark String?
 
   categoryId String?
@@ -18,9 +18,6 @@ model Transaction {
 
   recurringExpenseId String?
   recurringExpense   ReccuringExpenses? @relation("RecurringExpenseTransaction", fields: [recurringExpenseId], references: [id], onDelete: SetNull)
-
-  transferOut Transfer? @relation("TransferSourceTransaction")
-  transferIn  Transfer? @relation("TransferTargetTransaction")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

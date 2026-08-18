@@ -201,10 +201,6 @@ export class TransactionService {
       };
     }
 
-    const totalsWhere: Prisma.TransactionWhereInput = {
-      ...where,
-    };
-
     let orderBy: Prisma.TransactionOrderByWithRelationInput = { date: 'desc' };
     if (sortBy === 'date_asc') orderBy = { date: 'asc' };
     else if (sortBy === 'amount_desc') orderBy = { amount: 'desc' };
@@ -221,33 +217,11 @@ export class TransactionService {
         include: {
           category: { select: { id: true, name: true } },
           paymentMethod: { select: { id: true, name: true } },
-          transferOut: {
-            select: {
-              id: true,
-              targetBook: {
-                select: {
-                  id: true,
-                  name: true,
-                },
-              },
-            },
-          },
-          transferIn: {
-            select: {
-              id: true,
-              sourceBook: {
-                select: {
-                  id: true,
-                  name: true,
-                },
-              },
-            },
-          },
         },
       }),
       this.prisma.transaction.groupBy({
         by: ['type'],
-        where: totalsWhere,
+        where,
         orderBy: { type: 'asc' },
         _sum: { amount: true },
       }),
@@ -282,28 +256,6 @@ export class TransactionService {
             name: true,
           },
         },
-        transferOut: {
-          select: {
-            id: true,
-            targetBook: {
-              select: {
-                id: true,
-                name: true,
-              },
-            },
-          },
-        },
-        transferIn: {
-          select: {
-            id: true,
-            sourceBook: {
-              select: {
-                id: true,
-                name: true,
-              },
-            },
-          },
-        },
       },
     });
 
@@ -320,49 +272,19 @@ export class TransactionService {
     updateTransactionDto: UpdateTransactionDto,
   ) {
     const existingTransaction = await this.prisma.transaction.findFirst({
-      where: {
-        id,
-        book: { userId },
-      },
-      include: {
-        book: {
-          select: {
-            userId: true,
-          },
-        },
-        transferOut: {
-          select: {
-            id: true,
-          },
-        },
-        transferIn: {
-          select: {
-            id: true,
-          },
-        },
-      },
+      where: { id, book: { userId } },
+      include: { book: { select: { userId: true } } },
     });
 
     if (!existingTransaction) {
       throw new NotFoundException(`Transaction with id ${id} not found`);
     }
 
-    if (existingTransaction.transferOut || existingTransaction.transferIn) {
-      throw new BadRequestException(
-        'Transfer transactions cannot be edited directly',
-      );
-    }
-
-    if (updateTransactionDto.amount !== undefined) {
-      const decimalAmount = new Prisma.Decimal(updateTransactionDto.amount);
-
-      if (decimalAmount.isNegative()) {
-        throw new BadRequestException('Amount cannot be negative');
-      }
-
-      if (decimalAmount.isZero()) {
-        throw new BadRequestException('Amount must be greater than zero');
-      }
+    if (
+      updateTransactionDto.amount !== undefined &&
+      new Prisma.Decimal(updateTransactionDto.amount).isNegative()
+    ) {
+      throw new BadRequestException('Amount cannot be negative');
     }
 
     const updateData: TransactionUpdateData = {
@@ -371,10 +293,9 @@ export class TransactionService {
       date: updateTransactionDto.date
         ? new Date(updateTransactionDto.date)
         : undefined,
-      amount:
-        updateTransactionDto.amount !== undefined
-          ? new Prisma.Decimal(updateTransactionDto.amount)
-          : undefined,
+      amount: updateTransactionDto.amount
+        ? new Prisma.Decimal(updateTransactionDto.amount)
+        : undefined,
     };
 
     if (updateTransactionDto.categoryId !== undefined) {
@@ -470,35 +391,7 @@ export class TransactionService {
   }
 
   async remove(userId: string, id: string): Promise<Transaction> {
-    const transaction = await this.prisma.transaction.findFirst({
-      where: {
-        id,
-        book: { userId },
-      },
-      include: {
-        transferOut: {
-          select: {
-            id: true,
-          },
-        },
-        transferIn: {
-          select: {
-            id: true,
-          },
-        },
-      },
-    });
-
-    if (!transaction) {
-      throw new NotFoundException(`Transaction with id ${id} not found`);
-    }
-
-    if (transaction.transferOut || transaction.transferIn) {
-      throw new BadRequestException(
-        'Transfer transactions cannot be deleted directly',
-      );
-    }
-
+    const transaction = await this.findOne(userId, id);
     return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const deletedTransaction = await tx.transaction.delete({
         where: { id },

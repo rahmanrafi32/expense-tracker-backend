@@ -80,29 +80,13 @@ export class BookService {
 
   async remove(id: string, currentUserId: string) {
     const book = await this.findOne(id);
-
     if (book.userId !== currentUserId) {
       throw new UnauthorizedException(
         'You are not authorized to delete this book',
       );
     }
-
-    return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      const deletedBook = await tx.book.delete({
-        where: {
-          id,
-        },
-      });
-
-      await tx.transfer.deleteMany({
-        where: {
-          userId: currentUserId,
-          sourceBookId: null,
-          targetBookId: null,
-        },
-      });
-
-      return deletedBook;
+    return this.prisma.book.delete({
+      where: { id },
     });
   }
 }
