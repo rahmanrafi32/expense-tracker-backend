@@ -26,11 +26,6 @@ export class UpdateSinkingFundDto {
   @IsDateString()
   deadline?: string;
 
-  @ApiProperty({ example: 'car', required: false })
-  @IsOptional()
-  @IsString()
-  icon?: string;
-
   @ApiProperty({
     example: '99348009-2d8d-4617-b56a-2871ec12b13d',
     description: 'Category UUID',

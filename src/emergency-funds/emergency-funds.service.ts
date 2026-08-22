@@ -10,6 +10,7 @@ import {
   CreateEmergencyFundsDto,
   EmergencyEntryType,
 } from './dto/create-emergency-fund.dto';
+import dayjs from 'dayjs';
 
 @Injectable()
 export class EmergencyService {
@@ -109,7 +110,7 @@ export class EmergencyService {
         }
       }
 
-      const entryDate = dto.date ? new Date(dto.date) : new Date();
+      const entryDate = dto.date ? dayjs(dto.date).toDate() : dayjs().toDate();
 
       const transactionType =
         dto.type === EmergencyEntryType.WITHDRAWAL
@@ -369,7 +370,7 @@ export class EmergencyService {
       },
       data: {
         bookTotalAmount: balance,
-        updatedAt: new Date(),
+        updatedAt: dayjs().toDate(),
       },
     });
   }

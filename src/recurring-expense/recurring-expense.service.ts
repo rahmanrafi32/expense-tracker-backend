@@ -16,12 +16,15 @@ import dayjs, { Dayjs } from 'dayjs';
 import { BalanceService } from '../balance/balance.service';
 import { EXPENSE_FREQUENCY_MONTHS } from './constants/expense-frequency.constants';
 import { type RecurringExpenseDisplayInput } from './types/recurring-expense-display.type';
+import { AllocationService } from '../allocation/allocation.service';
+import { getRemainingDuration } from '../utils/date-duration';
 
 @Injectable()
 export class RecurringExpenseService {
   constructor(
     private readonly prisma: PrismaService,
     private balanceService: BalanceService,
+    private readonly allocationService: AllocationService,
   ) {}
 
   async create(userId: string, dto: CreateRecurringExpenseDto) {
@@ -63,29 +66,58 @@ export class RecurringExpenseService {
       throw new BadRequestException('Payment method not found');
     }
 
-    const created = await this.prisma.reccuringExpenses.create({
-      data: {
-        bookId: dto.bookId,
-        name: dto.name,
-        amount: decimalAmount,
-        categoryId: category.id,
-        paymentMethodId: paymentMethod.id,
-        frequency: dto.frequency,
-        nextDueDate: dto.nextDueDate,
-        status: ExpenseStatus.UNPAID,
+    const created = await this.prisma.$transaction(
+      async (tx: Prisma.TransactionClient) => {
+        const recurringExpense = await tx.reccuringExpenses.create({
+          data: {
+            bookId: dto.bookId,
+            name: dto.name,
+            amount: decimalAmount,
+            categoryId: category.id,
+            paymentMethodId: paymentMethod.id,
+            frequency: dto.frequency,
+            nextDueDate: dto.nextDueDate,
+            status: ExpenseStatus.UNPAID,
+          },
+        });
+
+        if (dto.frequency !== 'MONTHLY') {
+          await tx.sinkingFund.create({
+            data: {
+              bookId: dto.bookId,
+              name: dto.name,
+              targetAmount: decimalAmount,
+              savedAmount: new Prisma.Decimal(0),
+              cycleStartedAt: dayjs().toDate(),
+              deadline: dto.nextDueDate,
+              categoryId: category.id,
+              recurringExpenseId: recurringExpense.id,
+            },
+          });
+        }
+
+        await this.allocationService.reconcileBook(tx, dto.bookId);
+
+        return recurringExpense.id;
       },
-      include: {
-        category: { select: { id: true, name: true } },
-        paymentMethod: { select: { id: true, name: true } },
-      },
-    });
+    );
+
+    const recurringExpense =
+      await this.prisma.reccuringExpenses.findUniqueOrThrow({
+        where: { id: created },
+        include: {
+          category: { select: { id: true, name: true } },
+          paymentMethod: { select: { id: true, name: true } },
+        },
+      });
 
     return {
-      ...created,
-      category: created.category?.name || null,
-      paymentMethod: created.paymentMethod?.name || null,
+      ...recurringExpense,
+      category: recurringExpense.category?.name || null,
+      paymentMethod: recurringExpense.paymentMethod?.name || null,
     };
   }
+
   private computeExpenseDisplay(
     bill: RecurringExpenseDisplayInput,
     now: Dayjs,
@@ -93,6 +125,10 @@ export class RecurringExpenseService {
     const daysUntilDue = dayjs(bill.nextDueDate)
       .startOf('day')
       .diff(now, 'day');
+    const duration = getRemainingDuration(
+      now,
+      dayjs(bill.nextDueDate).startOf('day'),
+    );
 
     let status: ExpenseStatus;
 
@@ -108,10 +144,22 @@ export class RecurringExpenseService {
       .div(EXPENSE_FREQUENCY_MONTHS[bill.frequency])
       .toDecimalPlaces(2);
 
+    const shortfall = bill.sinkingFund
+      ? Prisma.Decimal.max(
+          new Prisma.Decimal(bill.sinkingFund.targetAmount).minus(
+            new Prisma.Decimal(bill.sinkingFund.savedAmount),
+          ),
+          new Prisma.Decimal(0),
+        )
+      : new Prisma.Decimal(0);
+
     return {
       status,
       monthlyEquivalent: monthlyEquivalent.toNumber(),
       daysUntilDue,
+      monthsLeft: duration.months,
+      daysLeft: duration.days,
+      shortfall: shortfall.toFixed(2),
     };
   }
 
@@ -128,6 +176,14 @@ export class RecurringExpenseService {
       include: {
         category: { select: { id: true, name: true } },
         paymentMethod: { select: { id: true, name: true } },
+        sinkingFund: {
+          select: {
+            id: true,
+            targetAmount: true,
+            savedAmount: true,
+            deadline: true,
+          },
+        },
       },
     });
 
@@ -145,6 +201,7 @@ export class RecurringExpenseService {
 
       category: b.category,
       paymentMethod: b.paymentMethod,
+      sinkingFund: b.sinkingFund,
 
       ...this.computeExpenseDisplay(b, now),
     }));
@@ -153,7 +210,17 @@ export class RecurringExpenseService {
   private async getExpenseOrThrow(userId: string, id: string) {
     const expense = await this.prisma.reccuringExpenses.findFirst({
       where: { id, book: { userId } },
-      include: { category: { select: { name: true } } },
+      include: {
+        category: { select: { name: true } },
+        sinkingFund: {
+          select: {
+            id: true,
+            targetAmount: true,
+            savedAmount: true,
+            deadline: true,
+          },
+        },
+      },
     });
     if (!expense) throw new NotFoundException(`Bill ${id} not found`);
     return expense;
@@ -170,12 +237,8 @@ export class RecurringExpenseService {
     };
   }
 
-  async update(
-    userId: string,
-    id: string,
-    dto: UpdateRecurringExpenseDto,
-  ): Promise<any> {
-    await this.getExpenseOrThrow(userId, id);
+  async update(userId: string, id: string, dto: UpdateRecurringExpenseDto) {
+    const expense = await this.getExpenseOrThrow(userId, id);
 
     if (dto.amount !== undefined) {
       const decimalAmount = new Prisma.Decimal(dto.amount);
@@ -187,6 +250,17 @@ export class RecurringExpenseService {
       if (decimalAmount.isZero()) {
         throw new BadRequestException('Amount must be greater than zero');
       }
+
+      if (
+        expense.sinkingFund &&
+        decimalAmount.lt(new Prisma.Decimal(expense.sinkingFund.savedAmount))
+      ) {
+        throw new BadRequestException(
+          `Amount cannot be less than the current saved amount of ${new Prisma.Decimal(
+            expense.sinkingFund.savedAmount,
+          ).toFixed(2)}`,
+        );
+      }
     }
 
     const data: Prisma.ReccuringExpensesUncheckedUpdateInput = {};
@@ -194,7 +268,9 @@ export class RecurringExpenseService {
     if (dto.amount !== undefined) data.amount = new Prisma.Decimal(dto.amount);
     if (dto.frequency !== undefined) data.frequency = dto.frequency;
     if (dto.nextDueDate !== undefined)
-      data.nextDueDate = new Date(dto.nextDueDate);
+      data.nextDueDate = dayjs(dto.nextDueDate).toDate();
+
+    let categoryId = expense.categoryId;
 
     if (dto.categoryId !== undefined) {
       const category = await this.prisma.category.findFirst({
@@ -209,6 +285,7 @@ export class RecurringExpenseService {
       }
 
       data.categoryId = category.id;
+      categoryId = category.id;
     }
 
     if (dto.paymentMethodId !== undefined) {
@@ -226,22 +303,105 @@ export class RecurringExpenseService {
       data.paymentMethodId = paymentMethod.id;
     }
 
-    return await this.prisma.reccuringExpenses.update({
-      where: { id },
-      data,
+    const updatedId = await this.prisma.$transaction(
+      async (tx: Prisma.TransactionClient) => {
+        const updated = await tx.reccuringExpenses.update({
+          where: { id },
+          data,
+        });
+
+        const updatedFrequency = dto.frequency ?? expense.frequency;
+
+        if (updatedFrequency === 'MONTHLY' && expense.sinkingFund) {
+          await tx.sinkingFund.update({
+            where: { id: expense.sinkingFund.id },
+            data: { recurringExpenseId: null },
+          });
+        } else if (updatedFrequency !== 'MONTHLY' && expense.sinkingFund) {
+          const sinkingFundData: Prisma.SinkingFundUncheckedUpdateInput = {};
+
+          if (dto.name !== undefined) {
+            sinkingFundData.name = dto.name.trim();
+          }
+
+          if (dto.amount !== undefined) {
+            sinkingFundData.targetAmount = new Prisma.Decimal(dto.amount);
+          }
+
+          if (dto.nextDueDate !== undefined) {
+            sinkingFundData.deadline = dayjs(dto.nextDueDate).toDate();
+          }
+
+          if (dto.categoryId !== undefined) {
+            sinkingFundData.categoryId = categoryId;
+          }
+
+          if (Object.keys(sinkingFundData).length > 0) {
+            await tx.sinkingFund.update({
+              where: { id: expense.sinkingFund.id },
+              data: sinkingFundData,
+            });
+          }
+        } else if (updatedFrequency !== 'MONTHLY') {
+          await tx.sinkingFund.create({
+            data: {
+              bookId: expense.bookId,
+              name: updated.name,
+              targetAmount: updated.amount,
+              savedAmount: new Prisma.Decimal(0),
+              deadline: updated.nextDueDate,
+              cycleStartedAt: dayjs().toDate(),
+              categoryId: updated.categoryId,
+              recurringExpenseId: updated.id,
+            },
+          });
+        }
+
+        await this.allocationService.reconcileBook(tx, expense.bookId);
+
+        return updated.id;
+      },
+    );
+
+    const updated = await this.prisma.reccuringExpenses.findUniqueOrThrow({
+      where: { id: updatedId },
       include: {
         category: { select: { id: true, name: true } },
         paymentMethod: { select: { id: true, name: true } },
       },
     });
+
+    return {
+      ...updated,
+      category: updated.category?.name || null,
+      paymentMethod: updated.paymentMethod?.name || null,
+    };
   }
 
   async markPaid(userId: string, id: string): Promise<ReccuringExpenses> {
     const expense = await this.getExpenseOrThrow(userId, id);
+
+    if (expense.sinkingFund) {
+      const requiredAmount = new Prisma.Decimal(
+        expense.sinkingFund.targetAmount,
+      );
+
+      const savedAmount = new Prisma.Decimal(expense.sinkingFund.savedAmount);
+
+      const shortfall = requiredAmount.minus(savedAmount);
+
+      if (shortfall.gt(0)) {
+        throw new BadRequestException(
+          `Cannot mark ${expense.name} as paid. ${shortfall.toFixed(2)} is still required to fully fund this payment.`,
+        );
+      }
+    }
+
     const months = EXPENSE_FREQUENCY_MONTHS[expense.frequency];
     const nextDueDate = dayjs(expense.nextDueDate).add(months, 'month');
 
     return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const paymentDate = dayjs();
       const updated = await tx.reccuringExpenses.update({
         where: { id },
         data: {
@@ -256,12 +416,33 @@ export class RecurringExpenseService {
           type: TransactionType.EXPENSE,
           amount: expense.amount,
           remark: expense.name,
-          date: new Date(),
+          date: paymentDate.toDate(),
           categoryId: expense.categoryId,
           paymentMethodId: expense.paymentMethodId,
           recurringExpenseId: id,
         },
       });
+
+      const sinkingFund = await tx.sinkingFund.findUnique({
+        where: {
+          recurringExpenseId: id,
+        },
+      });
+
+      if (sinkingFund) {
+        await tx.sinkingFund.update({
+          where: {
+            id: sinkingFund.id,
+          },
+          data: {
+            savedAmount: new Prisma.Decimal(0),
+            deadline: nextDueDate.toDate(),
+            cycleStartedAt: paymentDate.toDate(),
+          },
+        });
+      }
+
+      await this.allocationService.reconcileBook(tx, expense.bookId);
 
       await this.balanceService.updateBookBalance(tx, expense.bookId);
 

@@ -15,6 +15,7 @@ model Book {
   goals                   Goal[]
   emergencyEntries        EmergencyFund[]
   sinkingFunds            SinkingFund[]
+  allocationBatches       AllocationBatch[]
 }
 
 enum BookType {

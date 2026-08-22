@@ -37,7 +37,7 @@ export class GoalsService {
         name: dto.name,
         targetAmount: new Prisma.Decimal(dto.targetAmount),
         savedAmount: new Prisma.Decimal(0),
-        deadline: new Date(dto.deadline),
+        deadline: dayjs(dto.deadline).toDate(),
         icon: dto.icon ?? 'target',
       },
       include: {
@@ -187,7 +187,7 @@ export class GoalsService {
             targetAmount,
 
             ...(dto.deadline !== undefined && {
-              deadline: new Date(dto.deadline),
+              deadline: dayjs(dto.deadline).toDate(),
             }),
 
             ...(dto.icon !== undefined && {
@@ -233,7 +233,7 @@ export class GoalsService {
         }),
 
         ...(dto.deadline !== undefined && {
-          deadline: new Date(dto.deadline),
+          deadline: dayjs(dto.deadline).toDate(),
         }),
 
         ...(dto.icon !== undefined && {
@@ -294,7 +294,7 @@ export class GoalsService {
           goalId,
           amount,
           note: dto.note,
-          date: dto.date ? new Date(dto.date) : new Date(),
+          date: dto.date ? dayjs(dto.date).toDate() : dayjs().toDate(),
         },
       });
 

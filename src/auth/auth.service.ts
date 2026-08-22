@@ -13,6 +13,7 @@ import {
 } from './dto/password-reset.dto';
 import { createHash, randomBytes } from 'crypto';
 import { EmailNotificationService } from '../email-notification/email-notification.service';
+import dayjs from 'dayjs';
 
 @Injectable()
 export class AuthService {
@@ -143,8 +144,7 @@ export class AuthService {
       process.env.JWT_REFRESH_TOKEN_EXPIRATION ?? 7,
     );
 
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + expirationDays);
+    const expiresAt = dayjs().add(expirationDays, 'day').toDate();
     await this.prisma.refreshToken.create({
       data: {
         userId,
@@ -177,7 +177,7 @@ export class AuthService {
           return { outcome: 'invalid' as const };
         }
 
-        if (tokenRecord.expiresAt < new Date()) {
+        if (dayjs(tokenRecord.expiresAt).isBefore(dayjs())) {
           await transaction.refreshToken.deleteMany({
             where: {
               id: tokenRecord.id,
@@ -203,8 +203,7 @@ export class AuthService {
         const expirationDays = Number(
           process.env.JWT_REFRESH_TOKEN_EXPIRATION ?? 7,
         );
-        const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + expirationDays);
+        const expiresAt = dayjs().add(expirationDays, 'day').toDate();
 
         await transaction.refreshToken.create({
           data: {
@@ -349,7 +348,7 @@ export class AuthService {
       data: {
         token: hashedToken,
         userId: user.id,
-        expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+        expiresAt: dayjs().add(15, 'minute').toDate(),
       },
     });
 
@@ -385,7 +384,7 @@ export class AuthService {
       );
     }
 
-    if (resetRecord.expiresAt < new Date()) {
+    if (dayjs(resetRecord.expiresAt).isBefore(dayjs())) {
       return new CommonResponse(
         false,
         HttpStatus.BAD_REQUEST,

@@ -3,6 +3,7 @@ import { Resend } from 'resend';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { Prisma } from '@prisma/client';
+import dayjs from 'dayjs';
 
 interface SendEmailOptions {
   to: string;
@@ -86,7 +87,7 @@ ${resetLink}
 
 If you didn't request a password reset, you can safely ignore this email.
 
-© ${new Date().getFullYear()} HisabWise
+© ${dayjs().year()} HisabWise
       `.trim(),
       html: this.buildEmailLayout({
         badge: '🔒 Account security',
@@ -363,7 +364,7 @@ Total upcoming: ${formattedTotal}
 
 Open HisabWise to review your upcoming payments and cash flow.
 
-© ${new Date().getFullYear()} HisabWise
+© ${dayjs().year()} HisabWise
   `.trim();
 
     await this.sendEmail({
@@ -460,7 +461,7 @@ Open HisabWise to review your upcoming payments and cash flow.
     heading,
     content,
     footer = '© ' +
-      new Date().getFullYear() +
+      dayjs().year() +
       ' HisabWise. Your private financial workspace.',
   }: {
     badge: string;

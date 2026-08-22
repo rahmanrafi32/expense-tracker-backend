@@ -11,6 +11,11 @@ model SinkingFund {
   categoryId String?
   category   Category? @relation("SinkingFundCategory", fields: [categoryId], references: [id], onDelete: SetNull)
 
+  recurringExpenseId String?             @unique
+  recurringExpense   ReccuringExpenses?  @relation("RecurringExpenseFund", fields: [recurringExpenseId], references: [id], onDelete: Cascade)
+  allocations        ReserveAllocation[]
+  cycleStartedAt     DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

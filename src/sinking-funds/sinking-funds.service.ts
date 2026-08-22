@@ -3,18 +3,26 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, SinkingFund } from '@prisma/client';
+import { ExpenseFrequency, Prisma, SinkingFund } from '@prisma/client';
 import dayjs, { Dayjs } from 'dayjs';
+import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
 
 import { PrismaService } from '../database/prisma.service';
 import { getRemainingDuration } from '../utils/date-duration';
 import { CreateSinkingFundDto } from './dto/create-sinking-fund.dto';
 import { UpdateSinkingFundDto } from './dto/update-sinking-fund.dto';
 import { CreateSinkingFundDepositDto } from './dto/create-sinking-fund-deposit.dto';
+import { AllocationService } from '../allocation/allocation.service';
+import { EXPENSE_FREQUENCY_MONTHS } from '../recurring-expense/constants/expense-frequency.constants';
+
+dayjs.extend(isSameOrAfter);
 
 @Injectable()
 export class SinkingFundService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly allocationService: AllocationService,
+  ) {}
 
   async create(userId: string, dto: CreateSinkingFundDto) {
     const book = await this.prisma.book.findFirst({
@@ -36,19 +44,24 @@ export class SinkingFundService {
       throw new NotFoundException('Category not found');
     }
 
-    const fund = await this.prisma.sinkingFund.create({
-      data: {
-        bookId: dto.bookId,
-        name: dto.name,
-        targetAmount: new Prisma.Decimal(dto.targetAmount),
-        savedAmount: new Prisma.Decimal(0),
-        deadline: new Date(dto.deadline),
-        categoryId: category.id,
-      },
-      include: {
-        deposits: true,
-        category: { select: { id: true, name: true } },
-      },
+    const fund = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.sinkingFund.create({
+        data: {
+          bookId: dto.bookId,
+          name: dto.name,
+          targetAmount: new Prisma.Decimal(dto.targetAmount),
+          savedAmount: new Prisma.Decimal(0),
+          deadline: dayjs(dto.deadline).toDate(),
+          cycleStartedAt: dayjs().toDate(),
+          categoryId: category.id,
+        },
+        include: {
+          deposits: true,
+          category: { select: { id: true, name: true } },
+        },
+      });
+      await this.allocationService.reconcileBook(tx, dto.bookId);
+      return created;
     });
 
     return this.serializeFund(fund);
@@ -75,6 +88,7 @@ export class SinkingFundService {
       include: {
         deposits: { orderBy: { date: 'desc' } },
         category: { select: { id: true, name: true } },
+        recurringExpense: { select: { frequency: true } },
       },
     });
 
@@ -92,6 +106,7 @@ export class SinkingFundService {
       include: {
         deposits: { orderBy: { date: 'desc' } },
         category: { select: { id: true, name: true } },
+        recurringExpense: { select: { frequency: true } },
       },
     });
 
@@ -144,10 +159,8 @@ export class SinkingFundService {
         }),
 
         ...(dto.deadline !== undefined && {
-          deadline: new Date(dto.deadline),
+          deadline: dayjs(dto.deadline).toDate(),
         }),
-
-        ...(dto.icon !== undefined && { icon: dto.icon }),
 
         ...(dto.categoryId !== undefined && {
           categoryId: dto.categoryId,
@@ -156,6 +169,7 @@ export class SinkingFundService {
       include: {
         deposits: { orderBy: { date: 'desc' } },
         category: { select: { id: true, name: true } },
+        recurringExpense: { select: { frequency: true } },
       },
     });
 
@@ -171,6 +185,11 @@ export class SinkingFundService {
     const amount = new Prisma.Decimal(dto.amount);
     const newSavedAmount = new Prisma.Decimal(fund.savedAmount).add(amount);
     const targetAmount = new Prisma.Decimal(fund.targetAmount);
+    const depositDate = dto.date ? dayjs(dto.date).toDate() : dayjs().toDate();
+
+    if (amount.lte(0)) {
+      throw new BadRequestException('Deposit amount must be greater than 0');
+    }
 
     if (newSavedAmount.gt(targetAmount)) {
       throw new BadRequestException(
@@ -180,13 +199,22 @@ export class SinkingFundService {
       );
     }
 
+    if (
+      fund.cycleStartedAt &&
+      dayjs(depositDate).isBefore(dayjs(fund.cycleStartedAt))
+    ) {
+      throw new BadRequestException(
+        'Deposit date cannot be before the current sinking fund cycle started.',
+      );
+    }
+
     return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const deposit = await tx.sinkingFundDeposit.create({
         data: {
           sinkingFundId: fundId,
           amount,
           note: dto.note,
-          date: dto.date ? new Date(dto.date) : new Date(),
+          date: depositDate,
         },
       });
 
@@ -248,6 +276,16 @@ export class SinkingFundService {
       };
     }>,
   ) {
+    const cycleStartedAt = fund.cycleStartedAt
+      ? dayjs(fund.cycleStartedAt)
+      : null;
+
+    const deposits = cycleStartedAt
+      ? fund.deposits.filter((deposit) =>
+          dayjs(deposit.date).isSameOrAfter(cycleStartedAt),
+        )
+      : fund.deposits;
+
     return {
       id: fund.id,
       bookId: fund.bookId,
@@ -255,9 +293,10 @@ export class SinkingFundService {
       targetAmount: fund.targetAmount.toFixed(2),
       savedAmount: fund.savedAmount.toFixed(2),
       deadline: fund.deadline,
+      cycleStartedAt: fund.cycleStartedAt,
       createdAt: fund.createdAt,
       updatedAt: fund.updatedAt,
-      deposits: fund.deposits.map((deposit) => ({
+      deposits: deposits.map((deposit) => ({
         ...deposit,
         amount: deposit.amount.toFixed(2),
       })),
@@ -265,7 +304,12 @@ export class SinkingFundService {
     };
   }
 
-  private computeFundMetrics(fund: SinkingFund, now: Dayjs) {
+  private computeFundMetrics(
+    fund: SinkingFund & {
+      recurringExpense?: { frequency: ExpenseFrequency } | null;
+    },
+    now: Dayjs,
+  ) {
     const deadline = dayjs(fund.deadline).startOf('day');
     const { exactMonths, months, days } = getRemainingDuration(now, deadline);
 
@@ -279,12 +323,18 @@ export class SinkingFundService {
     let dailyNeeded = new Prisma.Decimal(0);
 
     if (remaining.gt(0)) {
-      if (exactMonths >= 1) {
-        monthlyNeeded = remaining
-          .div(new Prisma.Decimal(exactMonths).toDecimalPlaces(10))
-          .ceil();
+      if (months >= 1) {
+        monthlyNeeded = fund.recurringExpense
+          ? fund.targetAmount
+              .div(
+                new Prisma.Decimal(
+                  EXPENSE_FREQUENCY_MONTHS[fund.recurringExpense.frequency],
+                ),
+              )
+              .toDecimalPlaces(2)
+          : remaining.div(new Prisma.Decimal(exactMonths)).toDecimalPlaces(2);
       } else if (totalDaysLeft > 0) {
-        dailyNeeded = remaining.div(totalDaysLeft).ceil();
+        dailyNeeded = remaining.div(totalDaysLeft).toDecimalPlaces(2);
       } else {
         dailyNeeded = remaining;
       }

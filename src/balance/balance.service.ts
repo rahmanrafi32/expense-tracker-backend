@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { Prisma, TransactionType } from '@prisma/client';
+import dayjs from 'dayjs';
 
 @Injectable()
 export class BalanceService {
@@ -16,7 +17,7 @@ export class BalanceService {
       where: { id: bookId },
       data: {
         bookTotalAmount: balance,
-        updatedAt: new Date(),
+        updatedAt: dayjs().toDate(),
       },
     });
   }
