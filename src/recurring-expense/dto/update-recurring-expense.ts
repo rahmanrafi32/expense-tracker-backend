@@ -3,7 +3,6 @@ import {
   IsDate,
   IsDecimal,
   IsEnum,
-  IsNotEmpty,
   IsOptional,
   IsString,
   IsUUID,
@@ -42,13 +41,11 @@ export class UpdateRecurringExpenseDto {
     example: '11111111-2222-4333-8444-555555555555',
     description: 'Payment method UUID',
   })
-  @IsNotEmpty({
-    message: 'Payment method ID is required',
-  })
+  @IsOptional()
   @IsUUID('all', {
     message: 'Payment method ID must be a valid UUID',
   })
-  paymentMethodId: string;
+  paymentMethodId?: string;
 
   @ApiPropertyOptional({ enum: ExpenseFrequency })
   @IsOptional()

@@ -1,4 +1,5 @@
 import { IsOptional, IsString, IsEnum, IsDecimal } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Currency } from '../enums/currency.enum';
 import { BookType } from '@prisma/client';
@@ -22,6 +23,9 @@ export class UpdateBookDto {
   currency?: Currency;
   @ApiProperty({ example: '60000', required: false })
   @IsOptional()
+  @Transform(({ value }: { value: string | number | null | undefined }) =>
+    typeof value === 'number' ? value.toString() : value,
+  )
   @IsDecimal(
     { decimal_digits: '0,2', force_decimal: false },
     {

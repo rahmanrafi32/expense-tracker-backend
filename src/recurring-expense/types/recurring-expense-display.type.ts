@@ -9,4 +9,8 @@ export interface RecurringExpenseDisplayInput {
   frequency: ExpenseFrequency;
   nextDueDate: Date;
   status: ExpenseStatus;
+  sinkingFund?: {
+    targetAmount: Prisma.Decimal;
+    savedAmount: Prisma.Decimal;
+  } | null;
 }

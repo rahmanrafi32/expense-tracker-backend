@@ -16,7 +16,8 @@ model EmergencyFund {
   createdAt DateTime          @default(now())
   updatedAt DateTime          @updatedAt
 
-  transaction Transaction? @relation("EmergencyFundTransaction")
+  transaction Transaction?        @relation("EmergencyFundTransaction")
+  allocations ReserveAllocation[]
 
   @@index([bookId])
   @@index([categoryId])

@@ -1,15 +1,16 @@
 model Goal {
-  id           String        @id @default(uuid())
+  id           String              @id @default(uuid())
   bookId       String
-  book         Book          @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  book         Book                @relation(fields: [bookId], references: [id], onDelete: Cascade)
   name         String
-  targetAmount Decimal       @db.Decimal(14, 2)
-  savedAmount  Decimal       @default(0) @db.Decimal(14, 2)
+  targetAmount Decimal             @db.Decimal(14, 2)
+  savedAmount  Decimal             @default(0) @db.Decimal(14, 2)
   deadline     DateTime
-  icon         String        @default("target")
+  icon         String              @default("target")
   deposits     GoalDeposit[]
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  allocations  ReserveAllocation[]
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
 
   @@index([bookId])
 }

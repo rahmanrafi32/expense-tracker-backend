@@ -1,0 +1,54 @@
+model AllocationBatch {
+  id                String   @id @default(uuid())
+  bookId            String
+  book              Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  amount            Decimal  @db.Decimal(14, 2)
+  allocatedAmount   Decimal  @default(0) @db.Decimal(14, 2)
+  unallocatedAmount Decimal  @default(0) @db.Decimal(14, 2)
+  date              DateTime @default(now())
+  note              String?
+
+  allocations ReserveAllocation[]
+
+  sourceTransactionId String?      @unique
+  sourceTransaction   Transaction? @relation(fields: [sourceTransactionId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([bookId])
+  @@index([date])
+}
+
+model ReserveAllocation {
+  id      String          @id @default(uuid())
+  batchId String
+  batch   AllocationBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  type   ReserveAllocationType
+  amount Decimal               @db.Decimal(14, 2)
+
+  sinkingFundId String?
+  sinkingFund   SinkingFund? @relation(fields: [sinkingFundId], references: [id], onDelete: SetNull)
+
+  goalId String?
+  goal   Goal?   @relation(fields: [goalId], references: [id], onDelete: SetNull)
+
+  emergencyFundId String?
+  emergencyFund   EmergencyFund? @relation(fields: [emergencyFundId], references: [id], onDelete: SetNull)
+
+  note String?
+
+  createdAt DateTime @default(now())
+
+  @@index([batchId])
+  @@index([sinkingFundId])
+  @@index([goalId])
+  @@index([emergencyFundId])
+}
+
+enum ReserveAllocationType {
+  EMERGENCY_REPAYMENT
+  SINKING_FUND
+  GOAL
+}

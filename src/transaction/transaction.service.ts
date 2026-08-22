@@ -10,12 +10,14 @@ import { TransactionType } from './enums/transaction-type.enum';
 import { Prisma, Transaction } from '@prisma/client';
 import { BalanceService } from '../balance/balance.service';
 import { type TransactionUpdateData } from './types/transaction-update-data.type';
+import { AllocationService } from '../allocation/allocation.service';
 
 @Injectable()
 export class TransactionService {
   constructor(
     private prisma: PrismaService,
     private balanceService: BalanceService,
+    private allocationService: AllocationService,
   ) {}
 
   async create(userId: string, createTransactionDto: CreateTransactionDto) {
@@ -124,6 +126,17 @@ export class TransactionService {
             tx,
             createTransactionDto.bookId,
           );
+
+          if (createTransactionDto.type === TransactionType.INCOME) {
+            await this.allocationService.allocate(
+              tx,
+              createTransactionDto.bookId,
+              decimalAmount,
+              new Date(createTransactionDto.date),
+              `Automatic allocation for income transaction`,
+              newTransaction.id,
+            );
+          }
 
           return newTransaction;
         },

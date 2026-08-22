@@ -7,6 +7,7 @@ import {
   IsEnum,
   IsDecimal,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { BookType } from '@prisma/client';
 import { Currency } from '../enums/currency.enum';
@@ -45,6 +46,9 @@ export class CreateBookDto {
     required: false,
   })
   @IsOptional()
+  @Transform(({ value }: { value: string | number | null | undefined }) =>
+    typeof value === 'number' ? value.toString() : value,
+  )
   @IsDecimal(
     { decimal_digits: '0,2', force_decimal: false },
     {

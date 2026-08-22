@@ -18,6 +18,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { EmailNotificationModule } from './email-notification/email-notification.module';
 import { CloudinaryModule } from './cloudinary/cloudinary.module';
 import { CronModule } from './cron/cron.module';
+import { AllocationModule } from './allocation/allocation.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { CronModule } from './cron/cron.module';
     EmailNotificationModule,
     CloudinaryModule,
     CronModule,
+    AllocationModule,
   ],
   controllers: [],
   providers: [],
