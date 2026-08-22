@@ -116,10 +116,10 @@ export class AllocationService {
     const alreadyAllocatedThisPeriod =
       deposits._sum.amount ?? new Prisma.Decimal(0);
 
-    const monthlyCapacity = Prisma.Decimal.min(
-      normalMonthlyAmount,
-      remainingAmount,
-    );
+    const monthlyCapacity =
+      remainingMonths <= 1
+        ? remainingAmount
+        : Prisma.Decimal.min(normalMonthlyAmount, remainingAmount);
     const allocationRequired = Prisma.Decimal.max(
       monthlyCapacity.minus(alreadyAllocatedThisPeriod),
       new Prisma.Decimal(0),
@@ -159,7 +159,9 @@ export class AllocationService {
       throw new BadRequestException('Amount must be greater than zero');
     }
 
-    const allocationDate = dto.date ? new Date(dto.date) : new Date();
+    const allocationDate = dto.date
+      ? dayjs(dto.date).toDate()
+      : dayjs().toDate();
 
     if (Number.isNaN(allocationDate.getTime())) {
       throw new BadRequestException('Invalid allocation date');
@@ -385,6 +387,14 @@ export class AllocationService {
             : requirement.allocationRequired,
         );
 
+        if (
+          !requirement.allocationRequired.isZero() &&
+          allocationAmount.lt(requirement.allocationRequired) &&
+          allocationAmount.lt(currentRemaining)
+        ) {
+          continue;
+        }
+
         if (allocationAmount.lte(0)) {
           continue;
         }
@@ -556,7 +566,7 @@ export class AllocationService {
   async reconcileBook(
     tx: Prisma.TransactionClient,
     bookId: string,
-    allocationDate = new Date(),
+    allocationDate = dayjs().toDate(),
   ) {
     const batches = await tx.allocationBatch.findMany({
       where: { bookId, unallocatedAmount: { gt: 0 } },
@@ -601,6 +611,15 @@ export class AllocationService {
           remainingTarget,
           monthlyEquivalent,
         );
+
+        if (
+          fund.recurringExpense &&
+          allocationAmount.lt(monthlyEquivalent) &&
+          allocationAmount.lt(remainingTarget)
+        ) {
+          continue;
+        }
+
         if (allocationAmount.isZero()) continue;
 
         await tx.reserveAllocation.create({

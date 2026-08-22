@@ -79,10 +79,6 @@ export class RecurringExpenseService {
             nextDueDate: dto.nextDueDate,
             status: ExpenseStatus.UNPAID,
           },
-          include: {
-            category: { select: { id: true, name: true } },
-            paymentMethod: { select: { id: true, name: true } },
-          },
         });
 
         if (dto.frequency !== 'MONTHLY') {
@@ -92,7 +88,7 @@ export class RecurringExpenseService {
               name: dto.name,
               targetAmount: decimalAmount,
               savedAmount: new Prisma.Decimal(0),
-              cycleStartedAt: new Date(),
+              cycleStartedAt: dayjs().toDate(),
               deadline: dto.nextDueDate,
               categoryId: category.id,
               recurringExpenseId: recurringExpense.id,
@@ -102,14 +98,23 @@ export class RecurringExpenseService {
 
         await this.allocationService.reconcileBook(tx, dto.bookId);
 
-        return recurringExpense;
+        return recurringExpense.id;
       },
     );
 
+    const recurringExpense =
+      await this.prisma.reccuringExpenses.findUniqueOrThrow({
+        where: { id: created },
+        include: {
+          category: { select: { id: true, name: true } },
+          paymentMethod: { select: { id: true, name: true } },
+        },
+      });
+
     return {
-      ...created,
-      category: created.category?.name || null,
-      paymentMethod: created.paymentMethod?.name || null,
+      ...recurringExpense,
+      category: recurringExpense.category?.name || null,
+      paymentMethod: recurringExpense.paymentMethod?.name || null,
     };
   }
 
@@ -152,9 +157,8 @@ export class RecurringExpenseService {
       status,
       monthlyEquivalent: monthlyEquivalent.toNumber(),
       daysUntilDue,
-      monthsLeft:
-        duration.exactMonths >= 1 ? Math.ceil(duration.exactMonths) : 0,
-      daysLeft: duration.exactMonths < 1 ? Math.max(daysUntilDue, 0) : 0,
+      monthsLeft: duration.months,
+      daysLeft: duration.days,
       shortfall: shortfall.toFixed(2),
     };
   }
@@ -233,11 +237,7 @@ export class RecurringExpenseService {
     };
   }
 
-  async update(
-    userId: string,
-    id: string,
-    dto: UpdateRecurringExpenseDto,
-  ): Promise<any> {
+  async update(userId: string, id: string, dto: UpdateRecurringExpenseDto) {
     const expense = await this.getExpenseOrThrow(userId, id);
 
     if (dto.amount !== undefined) {
@@ -268,7 +268,7 @@ export class RecurringExpenseService {
     if (dto.amount !== undefined) data.amount = new Prisma.Decimal(dto.amount);
     if (dto.frequency !== undefined) data.frequency = dto.frequency;
     if (dto.nextDueDate !== undefined)
-      data.nextDueDate = new Date(dto.nextDueDate);
+      data.nextDueDate = dayjs(dto.nextDueDate).toDate();
 
     let categoryId = expense.categoryId;
 
@@ -303,24 +303,11 @@ export class RecurringExpenseService {
       data.paymentMethodId = paymentMethod.id;
     }
 
-    return await this.prisma.$transaction(
+    const updatedId = await this.prisma.$transaction(
       async (tx: Prisma.TransactionClient) => {
         const updated = await tx.reccuringExpenses.update({
           where: { id },
           data,
-          include: {
-            category: { select: { id: true, name: true } },
-            paymentMethod: { select: { id: true, name: true } },
-            sinkingFund: {
-              select: {
-                id: true,
-                targetAmount: true,
-                savedAmount: true,
-                deadline: true,
-                cycleStartedAt: true,
-              },
-            },
-          },
         });
 
         const updatedFrequency = dto.frequency ?? expense.frequency;
@@ -342,7 +329,7 @@ export class RecurringExpenseService {
           }
 
           if (dto.nextDueDate !== undefined) {
-            sinkingFundData.deadline = new Date(dto.nextDueDate);
+            sinkingFundData.deadline = dayjs(dto.nextDueDate).toDate();
           }
 
           if (dto.categoryId !== undefined) {
@@ -363,7 +350,7 @@ export class RecurringExpenseService {
               targetAmount: updated.amount,
               savedAmount: new Prisma.Decimal(0),
               deadline: updated.nextDueDate,
-              cycleStartedAt: new Date(),
+              cycleStartedAt: dayjs().toDate(),
               categoryId: updated.categoryId,
               recurringExpenseId: updated.id,
             },
@@ -372,13 +359,23 @@ export class RecurringExpenseService {
 
         await this.allocationService.reconcileBook(tx, expense.bookId);
 
-        return {
-          ...updated,
-          category: updated.category?.name || null,
-          paymentMethod: updated.paymentMethod?.name || null,
-        };
+        return updated.id;
       },
     );
+
+    const updated = await this.prisma.reccuringExpenses.findUniqueOrThrow({
+      where: { id: updatedId },
+      include: {
+        category: { select: { id: true, name: true } },
+        paymentMethod: { select: { id: true, name: true } },
+      },
+    });
+
+    return {
+      ...updated,
+      category: updated.category?.name || null,
+      paymentMethod: updated.paymentMethod?.name || null,
+    };
   }
 
   async markPaid(userId: string, id: string): Promise<ReccuringExpenses> {

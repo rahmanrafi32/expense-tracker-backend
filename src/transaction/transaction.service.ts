@@ -11,6 +11,7 @@ import { Prisma, Transaction } from '@prisma/client';
 import { BalanceService } from '../balance/balance.service';
 import { type TransactionUpdateData } from './types/transaction-update-data.type';
 import { AllocationService } from '../allocation/allocation.service';
+import dayjs from 'dayjs';
 
 @Injectable()
 export class TransactionService {
@@ -86,7 +87,7 @@ export class TransactionService {
             data: {
               bookId: createTransactionDto.bookId,
               type: createTransactionDto.type,
-              date: new Date(createTransactionDto.date),
+              date: dayjs(createTransactionDto.date).toDate(),
               amount: createTransactionDto.amount
                 ? decimalAmount
                 : new Prisma.Decimal(0),
@@ -132,7 +133,7 @@ export class TransactionService {
               tx,
               createTransactionDto.bookId,
               decimalAmount,
-              new Date(createTransactionDto.date),
+              dayjs(createTransactionDto.date).toDate(),
               `Automatic allocation for income transaction`,
               newTransaction.id,
             );
@@ -199,15 +200,28 @@ export class TransactionService {
     }
 
     if (month && year) {
-      const startDate = new Date(year, month - 1, 1);
-      const endDate = new Date(year, month, 1);
+      const startDate = dayjs()
+        .year(year)
+        .month(month - 1)
+        .date(1)
+        .startOf('day')
+        .toDate();
+      const endDate = dayjs()
+        .year(year)
+        .month(month)
+        .date(1)
+        .startOf('day')
+        .toDate();
       where.date = {
         gte: startDate,
         lt: endDate,
       };
     } else if (year) {
-      const startDate = new Date(year, 0, 1);
-      const endDate = new Date(year + 1, 0, 1);
+      const startDate = dayjs().year(year).startOf('year').toDate();
+      const endDate = dayjs()
+        .year(year + 1)
+        .startOf('year')
+        .toDate();
       where.date = {
         gte: startDate,
         lt: endDate,
@@ -304,7 +318,7 @@ export class TransactionService {
       type: updateTransactionDto.type,
       remark: updateTransactionDto.remark,
       date: updateTransactionDto.date
-        ? new Date(updateTransactionDto.date)
+        ? dayjs(updateTransactionDto.date).toDate()
         : undefined,
       amount: updateTransactionDto.amount
         ? new Prisma.Decimal(updateTransactionDto.amount)

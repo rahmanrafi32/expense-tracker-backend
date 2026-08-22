@@ -51,8 +51,8 @@ export class SinkingFundService {
           name: dto.name,
           targetAmount: new Prisma.Decimal(dto.targetAmount),
           savedAmount: new Prisma.Decimal(0),
-          deadline: new Date(dto.deadline),
-          cycleStartedAt: new Date(),
+          deadline: dayjs(dto.deadline).toDate(),
+          cycleStartedAt: dayjs().toDate(),
           categoryId: category.id,
         },
         include: {
@@ -159,7 +159,7 @@ export class SinkingFundService {
         }),
 
         ...(dto.deadline !== undefined && {
-          deadline: new Date(dto.deadline),
+          deadline: dayjs(dto.deadline).toDate(),
         }),
 
         ...(dto.categoryId !== undefined && {
@@ -185,7 +185,7 @@ export class SinkingFundService {
     const amount = new Prisma.Decimal(dto.amount);
     const newSavedAmount = new Prisma.Decimal(fund.savedAmount).add(amount);
     const targetAmount = new Prisma.Decimal(fund.targetAmount);
-    const depositDate = dto.date ? new Date(dto.date) : new Date();
+    const depositDate = dto.date ? dayjs(dto.date).toDate() : dayjs().toDate();
 
     if (amount.lte(0)) {
       throw new BadRequestException('Deposit amount must be greater than 0');
@@ -311,7 +311,7 @@ export class SinkingFundService {
     now: Dayjs,
   ) {
     const deadline = dayjs(fund.deadline).startOf('day');
-    const { exactMonths } = getRemainingDuration(now, deadline);
+    const { exactMonths, months, days } = getRemainingDuration(now, deadline);
 
     const totalDaysLeft = Math.max(deadline.diff(now, 'day'), 0);
 
@@ -323,7 +323,7 @@ export class SinkingFundService {
     let dailyNeeded = new Prisma.Decimal(0);
 
     if (remaining.gt(0)) {
-      if (exactMonths >= 1) {
+      if (months >= 1) {
         monthlyNeeded = fund.recurringExpense
           ? fund.targetAmount
               .div(
@@ -352,8 +352,8 @@ export class SinkingFundService {
       remaining: remaining.toFixed(2),
       monthlyNeeded: monthlyNeeded.toFixed(2),
       dailyNeeded: dailyNeeded.toFixed(2),
-      monthsLeft: exactMonths >= 1 ? Math.ceil(exactMonths) : 0,
-      daysLeft: exactMonths < 1 ? totalDaysLeft : 0,
+      monthsLeft: months,
+      daysLeft: days,
     };
   }
 }
