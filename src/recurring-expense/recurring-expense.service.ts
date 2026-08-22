@@ -85,20 +85,20 @@ export class RecurringExpenseService {
           },
         });
 
-        const cycleStartedAt = new Date();
-
-        await tx.sinkingFund.create({
-          data: {
-            bookId: dto.bookId,
-            name: dto.name,
-            targetAmount: decimalAmount,
-            savedAmount: new Prisma.Decimal(0),
-            cycleStartedAt,
-            deadline: dto.nextDueDate,
-            categoryId: category.id,
-            recurringExpenseId: recurringExpense.id,
-          },
-        });
+        if (dto.frequency !== 'MONTHLY') {
+          await tx.sinkingFund.create({
+            data: {
+              bookId: dto.bookId,
+              name: dto.name,
+              targetAmount: decimalAmount,
+              savedAmount: new Prisma.Decimal(0),
+              cycleStartedAt: new Date(),
+              deadline: dto.nextDueDate,
+              categoryId: category.id,
+              recurringExpenseId: recurringExpense.id,
+            },
+          });
+        }
 
         await this.allocationService.reconcileBook(tx, dto.bookId);
 
@@ -323,7 +323,14 @@ export class RecurringExpenseService {
           },
         });
 
-        if (expense.sinkingFund) {
+        const updatedFrequency = dto.frequency ?? expense.frequency;
+
+        if (updatedFrequency === 'MONTHLY' && expense.sinkingFund) {
+          await tx.sinkingFund.update({
+            where: { id: expense.sinkingFund.id },
+            data: { recurringExpenseId: null },
+          });
+        } else if (updatedFrequency !== 'MONTHLY' && expense.sinkingFund) {
           const sinkingFundData: Prisma.SinkingFundUncheckedUpdateInput = {};
 
           if (dto.name !== undefined) {
@@ -348,6 +355,19 @@ export class RecurringExpenseService {
               data: sinkingFundData,
             });
           }
+        } else if (updatedFrequency !== 'MONTHLY') {
+          await tx.sinkingFund.create({
+            data: {
+              bookId: expense.bookId,
+              name: updated.name,
+              targetAmount: updated.amount,
+              savedAmount: new Prisma.Decimal(0),
+              deadline: updated.nextDueDate,
+              cycleStartedAt: new Date(),
+              categoryId: updated.categoryId,
+              recurringExpenseId: updated.id,
+            },
+          });
         }
 
         await this.allocationService.reconcileBook(tx, expense.bookId);
