@@ -562,6 +562,42 @@ export class AllocationService {
     });
   }
 
+  /** Consumes unallocated income when money is spent outside a reserve. */
+  async consumeUnallocated(
+    tx: Prisma.TransactionClient,
+    bookId: string,
+    amount: Prisma.Decimal,
+  ) {
+    if (amount.lte(0)) {
+      return;
+    }
+
+    const batches = await tx.allocationBatch.findMany({
+      where: { bookId, unallocatedAmount: { gt: 0 } },
+      orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
+      select: { id: true, unallocatedAmount: true },
+    });
+
+    let remaining = amount;
+    for (const batch of batches) {
+      if (remaining.isZero()) {
+        break;
+      }
+
+      const consumed = Prisma.Decimal.min(
+        remaining,
+        new Prisma.Decimal(batch.unallocatedAmount),
+      );
+
+      await tx.allocationBatch.update({
+        where: { id: batch.id },
+        data: { unallocatedAmount: { decrement: consumed } },
+      });
+
+      remaining = remaining.minus(consumed);
+    }
+  }
+
   /** Reconciles money that was previously left unallocated in this book. */
   async reconcileBook(
     tx: Prisma.TransactionClient,

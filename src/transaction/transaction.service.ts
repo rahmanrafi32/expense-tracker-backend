@@ -137,6 +137,12 @@ export class TransactionService {
               `Automatic allocation for income transaction`,
               newTransaction.id,
             );
+          } else if (createTransactionDto.type === TransactionType.EXPENSE) {
+            await this.allocationService.consumeUnallocated(
+              tx,
+              createTransactionDto.bookId,
+              decimalAmount,
+            );
           }
 
           return newTransaction;

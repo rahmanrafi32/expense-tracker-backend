@@ -6,10 +6,12 @@ Built with NestJS, TypeScript, PostgreSQL, and Prisma. The API is organized arou
 
 ## Highlights
 
-- JWT access-token authentication with rotating, hashed refresh tokens
+- HTTP-only cookie-based JWT authentication with rotating, hashed refresh tokens
 - User profiles and account lifecycle management
 - Multiple books with currencies: `USD`, `EUR`, `GBP`, `BDT`, and `INR`
 - Income and expense transactions with automatic balance recalculation
+- Automatic income allocation with emergency repayment, recurring-bill
+  funding, goal funding, and unallocated-cash tracking
 - Cursor-based pagination for transactions and emergency-fund entries
 - System, default, and user-owned categories and payment methods
 - Recurring expenses with due dates, normalized monthly costs, and automatic payment posting
@@ -17,6 +19,8 @@ Built with NestJS, TypeScript, PostgreSQL, and Prisma. The API is organized arou
 - Emergency-fund withdrawals, repayments, linked transactions, and summaries
 - Projected cash-flow timelines with shortfall detection
 - Monthly dashboards and yearly financial insights
+- Spending-trend analysis and protected daily recurring-payment reminders
+- Cloudinary profile-picture uploads and cron-triggered notifications
 - Global validation, response normalization, centralized errors, CORS, and Swagger
 
 ## Technology
@@ -59,6 +63,14 @@ PORT=3000
 JWT_SECRET="replace-this-with-a-long-random-secret"
 JWT_EXPIRATION_TIME="1d"
 JWT_REFRESH_TOKEN_EXPIRATION=7
+
+# Required when using the related integrations/routes
+RESEND_API_KEY="your-resend-api-key"
+MAIL_FROM="HisabWise <no-reply@example.com>"
+CLOUDINARY_CLOUD_NAME="your-cloud-name"
+CLOUDINARY_API_KEY="your-cloudinary-key"
+CLOUDINARY_API_SECRET="your-cloudinary-secret"
+CRON_SECRET="your-cron-secret"
 ```
 
 `DATABASE_URL` is required. `PORT` defaults to `3000`; the JWT secret defaults to a development placeholder if omitted, so set it in every non-local environment.
@@ -103,10 +115,12 @@ Errors use the same top-level structure:
 }
 ```
 
-Unless noted otherwise, protected endpoints require:
+Unless noted otherwise, protected endpoints authenticate through cookies set by
+the auth endpoints. Clients must send cookies on API requests (for example,
+`credentials: 'include'` in browser fetch requests):
 
 ```http
-Authorization: Bearer <access_token>
+Cookie: access_token=<access-token>; refresh_token=<refresh-token>
 Content-Type: application/json
 ```
 
@@ -119,7 +133,7 @@ IDs are UUIDs. Dates use ISO 8601 strings.
 | `POST` | `/auth/signup` | Public | Register a user |
 | `POST` | `/auth/login` | Public | Validate credentials and issue tokens |
 | `POST` | `/auth/refresh` | Public | Rotate a refresh token |
-| `POST` | `/auth/logout` | Bearer JWT | Revoke a refresh token |
+| `POST` | `/auth/logout` | Auth cookie | Revoke the refresh token and clear auth cookies |
 
 Signup body:
 
@@ -144,10 +158,13 @@ Login body:
 { "email": "jane@example.com", "password": "P@ssw0rd!" }
 ```
 
-The response contains `access_token` and `refresh_token`. Refresh-token requests use:
+Login sets `access_token` and `refresh_token` as HTTP-only cookies. The access
+cookie is used for protected requests; the refresh cookie is scoped to `/auth`
+and is used only by the refresh and logout endpoints. Refresh-token requests
+do not use a request body:
 
-```json
-{ "refresh_token": "<refresh-token>" }
+```http
+Cookie: refresh_token=<refresh-token>
 ```
 
 Refresh tokens are stored as SHA-256 hashes, expire after `JWT_REFRESH_TOKEN_EXPIRATION` days (default `7`), and are rotated on refresh.
@@ -320,6 +337,20 @@ Create body:
 
 Types are `WITHDRAWAL` and `REPAYMENT`. Withdrawals create linked `EXPENSE` transactions; repayments create linked `INCOME` transactions. Repayment amounts cannot exceed the outstanding amount. Default page size is `20`.
 
+## Allocation API
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `POST` | `/allocations` | Manually allocate available money |
+| `GET` | `/allocations?bookId=<bookId>` | List allocation batches for a book |
+| `GET` | `/allocations/:id` | Get allocation details |
+
+Income transactions invoke allocation automatically. The priority is emergency
+repayment, recurring-expense sinking funds, and then goals. Recurring funds
+receive only the amount required for the current period. Any remainder is
+recorded as unallocated; an ordinary expense consumes unallocated amounts
+oldest-first, preventing spent money from being allocated during reconciliation.
+
 ## Sinking-funds API
 
 Sinking funds are planned savings for known future expenses such as vehicle maintenance, annual fees, or repairs.
@@ -356,6 +387,18 @@ List responses include `progressPct`, `remaining`, `monthlyNeeded`, `monthsLeft`
 
 `days` defaults to `90` and must be between `30` and `365`. Projections consider monthly income, expected monthly expenses, recurring bills, and unfunded sinking-fund deadlines. Each item contains `date`, `balance`, and `isShortfall`.
 
+## Spending trends API
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `GET` | `/spending-trends?bookId=<bookId>` | Compare spending with expected monthly expenses |
+
+## Notifications and cron
+
+`GET /cron/daily` is a protected scheduler endpoint. It finds recurring
+payments due within seven days, avoids duplicate sends with notification logs,
+and sends reminder emails through Resend using `CRON_SECRET` for authorization.
+
 ## Insights API
 
 | Method | Endpoint | Description |
@@ -373,7 +416,11 @@ The monthly dashboard combines overview, category breakdown, fixed-vs-variable e
 
 Swagger UI: `http://localhost:3000/api/docs`.
 
-Use **Authorize** and enter `Bearer <access_token>`. The OpenAPI setup currently explicitly includes auth, user, book, transaction, category, and payment-method modules. The newer recurring-expense, goal, emergency, sinking-fund, cash-flow, and insights routes are implemented and available through REST, but may not appear in Swagger until their modules are added to the `include` list in `src/main.ts`.
+Use the auth cookies from login when calling protected routes. Swagger's
+Bearer authorization control is metadata for the JWT scheme; the runtime
+strategy reads the `access_token` cookie. Swagger includes the
+modules listed in `src/main.ts`; other implemented routes may be available via
+REST without appearing in the generated document until added to that list.
 
 ## Project structure
 
@@ -383,6 +430,7 @@ src/
 ├── user/                 User profile management
 ├── book/                 Books and balances
 ├── transaction/          Income and expense transactions
+├── allocation/           Automatic income allocation and reconciliation
 ├── category/             Category catalogs and custom categories
 ├── payment-method/       Payment-method catalogs and custom methods
 ├── recurring-expense/    Recurring bills and automatic payment posting
@@ -391,6 +439,10 @@ src/
 ├── sinking-funds/        Planned future-expense savings
 ├── cash-flow/            Projected daily cash-flow timeline
 ├── insights/             Monthly and yearly analytics
+├── spending-trends/      Spending comparisons and trends
+├── notification/         Recurring-payment reminders
+├── cron/                 Protected scheduled-job endpoint
+├── cloudinary/            Profile-image storage integration
 ├── database/             Prisma service and database module
 ├── prisma/               Schema fragments and migrations
 └── common/               Response envelope, filters, interceptors, and types

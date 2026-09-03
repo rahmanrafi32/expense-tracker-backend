@@ -53,6 +53,37 @@ directory `src/prisma/`, not a root-level `prisma/` directory.
 Before declaring an implementation task complete, run `yarn build` and `yarn lint`. Because lint auto-fixes, inspect `git diff` afterward. Never
 use `// @ts-ignore` or an eslint-disable comment to hide an underlying issue.
 
+## Feature map
+
+The API is book-scoped: a book owns the balance, transactions, recurring
+expenses, goals, emergency-fund activity, sinking funds, allocations, and
+analytics below.
+
+- **Authentication and users** — Signup, login, HTTP-only cookie-based JWT
+  access authentication, rotating hashed refresh tokens, logout, password
+  reset emails, profile updates, and profile-picture upload support. The JWT
+  strategy reads `access_token` from cookies; it does not read an
+  `Authorization: Bearer` header.
+- **Books** — Independent ledgers with currency, monthly income,
+  expected-monthly-expense baseline, calculated balance, and cascading records.
+- **Transactions and balance** — Income and expense records. Balance is total
+  income minus total expenses and is recalculated after changes.
+- **Allocation** — Income prioritizes emergency repayment, recurring-expense
+  sinking funds, and then goals. Excess income is unallocated; ordinary
+  expenses consume that amount oldest-first so spent cash cannot be allocated
+  later by reconciliation.
+- **Recurring expenses** — Monthly, quarterly, half-yearly, and yearly bills
+  with due status, automatic payment posting, and linked sinking funds.
+- **Goals and sinking funds** — Deadline-based targets and planned future
+  expenses with deposits, progress metrics, and automatic allocation.
+- **Emergency funds** — Withdrawals, repayments, outstanding summaries, and
+  linked transactions.
+- **Cash flow and analytics** — Daily projections with shortfall detection,
+  spending trends, monthly dashboards, category/payment-method breakdowns,
+  and yearly trends.
+- **Notifications and integrations** — Password-reset and recurring-payment
+  emails via Resend, profile images via Cloudinary, and protected cron jobs.
+
 ## Directory map
 
 | Path | Purpose |
@@ -63,6 +94,7 @@ use `// @ts-ignore` or an eslint-disable comment to hide an underlying issue.
 | `src/user/` | User accounts |
 | `src/book/` | Books/ledgers that own transactions and planning records |
 | `src/transaction/` | Income and expense transactions, scoped to a book |
+| `src/allocation/` | Automatic income allocation, history, and unallocated-cash reconciliation |
 | `src/category/` | System, default, and user categories |
 | `src/payment-method/` | System, default, and user payment methods |
 | `src/recurring-expense/` | Recurring expense scheduling and posting |
@@ -78,6 +110,9 @@ use `// @ts-ignore` or an eslint-disable comment to hide an underlying issue.
 | `src/prisma/` | Prisma schema fragments, `schema.prisma`, and migrations |
 | `src/common/` | Shared response DTOs, interceptor, exception filter, types, and exports |
 | `src/utils/` | Shared utilities |
+| `src/cloudinary/` | Profile-image upload integration |
+| `src/notification/` | Recurring-payment reminders and notification logs |
+| `src/cron/` | Protected daily notification trigger |
 | `**/*.spec.ts` | Colocated unit tests; none are currently present |
 | `test/` | Intended e2e test location; currently absent |
 | `docker-compose.yml` | Local PostgreSQL 16 service and persistent volume |
@@ -122,6 +157,9 @@ use `// @ts-ignore` or an eslint-disable comment to hide an underlying issue.
   default. The forgot-password route has an explicit 2-request/60-second
   limit. Apply appropriate throttling to any new rate-sensitive public route.
 - Validate and authorize ownership of all user- and book-scoped resources.
+- Keep income allocation and unallocated-cash consumption in the same Prisma
+  transaction as the source transaction, so spent cash cannot be reconciled
+  later.
 
 ## Git conventions
 
