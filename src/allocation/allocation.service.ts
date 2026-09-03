@@ -282,8 +282,8 @@ export class AllocationService {
         const emergencyFund = await tx.emergencyFund.create({
           data: {
             bookId,
-            categoryId: 'ac3efb42-f845-4bd2-9d0f-1c0d32c106df',
-            paymentMethodId: '8e9501cf-771c-42de-b76d-2135727c9766',
+            categoryId: '21810011-c156-4f60-a772-768abd6e7566',
+            paymentMethodId: 'a70e896c-f9a2-43b8-91c8-2fc537a264f2',
             type: 'REPAYMENT',
             amount: emergencyAllocation,
             remark: 'Automatic emergency fund repayment',
@@ -308,8 +308,8 @@ export class AllocationService {
             amount: emergencyAllocation,
             remark: 'Emergency fund repayment',
             date: allocationDate,
-            categoryId: 'ac3efb42-f845-4bd2-9d0f-1c0d32c106df',
-            paymentMethodId: '8e9501cf-771c-42de-b76d-2135727c9766',
+            categoryId: '21810011-c156-4f60-a772-768abd6e7566',
+            paymentMethodId: 'a70e896c-f9a2-43b8-91c8-2fc537a264f2',
           },
         });
 
