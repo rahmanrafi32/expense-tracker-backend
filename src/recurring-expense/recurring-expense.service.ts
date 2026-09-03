@@ -479,11 +479,10 @@ export class RecurringExpenseService {
     );
 
     const dueThisMonth = bills.filter((b) => {
-      const isUnpaid = b.status !== ExpenseStatus.PAID;
-      const isDueThisMonthOrEarlier =
+      return (
         dayjs(b.nextDueDate).isBefore(endOfMonth) ||
-        dayjs(b.nextDueDate).isSame(endOfMonth, 'day');
-      return isUnpaid && isDueThisMonthOrEarlier;
+        dayjs(b.nextDueDate).isSame(endOfMonth, 'day')
+      );
     });
 
     const dueThisMonthAmount = dueThisMonth.reduce(

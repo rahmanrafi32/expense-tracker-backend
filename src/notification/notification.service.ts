@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { NotificationType, Prisma } from '@prisma/client';
+import { ExpenseStatus, NotificationType, Prisma } from '@prisma/client';
 import dayjs, { Dayjs } from 'dayjs';
 
 import { PrismaService } from '../database/prisma.service';
@@ -42,6 +42,8 @@ export class NotificationService {
     );
 
     try {
+      const recurringPaymentStatuses =
+        await this.refreshRecurringPaymentStatuses(now);
       const paymentReminders = await this.processRecurringPaymentReminders(now);
 
       this.logger.log(
@@ -49,12 +51,14 @@ export class NotificationService {
           `Processed: ${paymentReminders.processed}, ` +
           `Emails sent: ${paymentReminders.sent}, ` +
           `Skipped: ${paymentReminders.skipped}, ` +
-          `Failed: ${paymentReminders.failed}`,
+          `Failed: ${paymentReminders.failed}, ` +
+          `Statuses updated: ${recurringPaymentStatuses.updated}`,
       );
 
       return {
         success: true,
         processedAt: now.toISOString(),
+        recurringPaymentStatuses,
         paymentReminders,
       };
     } catch (error: unknown) {
@@ -65,6 +69,29 @@ export class NotificationService {
 
       throw error;
     }
+  }
+
+  private async refreshRecurringPaymentStatuses(now: Dayjs) {
+    const statusWindowEnd = now.add(7, 'day').endOf('day');
+
+    const result = await this.prisma.reccuringExpenses.updateMany({
+      where: {
+        status: ExpenseStatus.PAID,
+        nextDueDate: {
+          lte: statusWindowEnd.toDate(),
+        },
+      },
+      data: {
+        status: ExpenseStatus.UNPAID,
+      },
+    });
+
+    this.logger.log(
+      `Reset ${result.count} recurring payment status(es) to UNPAID ` +
+        `for bills due within 7 days or already overdue`,
+    );
+
+    return { updated: result.count };
   }
 
   private async processRecurringPaymentReminders(now: Dayjs) {
