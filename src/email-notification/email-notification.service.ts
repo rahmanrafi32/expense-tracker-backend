@@ -4,6 +4,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { Prisma } from '@prisma/client';
 import dayjs from 'dayjs';
+import { formatLocalDate } from '../utils/date';
 
 interface SendEmailOptions {
   to: string;
@@ -200,11 +201,7 @@ If you didn't request a password reset, you can safely ignore this email.
       .map((payment) => {
         const formattedAmount = payment.amount.toFixed(2);
 
-        const formattedDate = payment.dueDate.toLocaleDateString('en-BD', {
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric',
-        });
+        const formattedDate = formatLocalDate(payment.dueDate);
 
         const status =
           payment.daysUntilDue <= 0
@@ -332,11 +329,7 @@ If you didn't request a password reset, you can safely ignore this email.
     const textPayments = [...payments]
       .sort((a, b) => a.daysUntilDue - b.daysUntilDue)
       .map((payment) => {
-        const formattedDate = payment.dueDate.toLocaleDateString('en-BD', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-        });
+        const formattedDate = formatLocalDate(payment.dueDate, 'long');
 
         const status =
           payment.daysUntilDue < 0

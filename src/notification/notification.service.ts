@@ -4,6 +4,7 @@ import dayjs, { Dayjs } from 'dayjs';
 
 import { PrismaService } from '../database/prisma.service';
 import { EmailNotificationService } from '../email-notification/email-notification.service';
+import { daysUntilLocalCalendarDay, localCalendarDay } from '../utils/date';
 
 interface ReminderExpense {
   id: string;
@@ -145,9 +146,7 @@ export class NotificationService {
     for (const expense of expenses) {
       processed++;
 
-      const daysUntilDue = dayjs(expense.nextDueDate)
-        .startOf('day')
-        .diff(now, 'day');
+      const daysUntilDue = daysUntilLocalCalendarDay(expense.nextDueDate);
 
       const notificationType = this.getNotificationType(daysUntilDue);
 
@@ -166,7 +165,7 @@ export class NotificationService {
         continue;
       }
 
-      const occurrenceDate = dayjs(expense.nextDueDate).startOf('day').toDate();
+      const occurrenceDate = localCalendarDay(expense.nextDueDate).toDate();
 
       const alreadySent = await this.prisma.notificationLog.findUnique({
         where: {
