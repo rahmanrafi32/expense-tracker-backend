@@ -18,6 +18,7 @@ import { EXPENSE_FREQUENCY_MONTHS } from './constants/expense-frequency.constant
 import { type RecurringExpenseDisplayInput } from './types/recurring-expense-display.type';
 import { AllocationService } from '../allocation/allocation.service';
 import { getRemainingDuration } from '../utils/date-duration';
+import { localCalendarDay } from '../utils/date';
 
 @Injectable()
 export class RecurringExpenseService {
@@ -122,13 +123,9 @@ export class RecurringExpenseService {
     bill: RecurringExpenseDisplayInput,
     now: Dayjs,
   ) {
-    const daysUntilDue = dayjs(bill.nextDueDate)
-      .startOf('day')
-      .diff(now, 'day');
-    const duration = getRemainingDuration(
-      now,
-      dayjs(bill.nextDueDate).startOf('day'),
-    );
+    const dueDate = localCalendarDay(bill.nextDueDate);
+    const daysUntilDue = dueDate.diff(now, 'day');
+    const duration = getRemainingDuration(now, dueDate);
 
     let status: ExpenseStatus;
 
@@ -187,7 +184,7 @@ export class RecurringExpenseService {
       },
     });
 
-    const now = dayjs().startOf('day');
+    const now = localCalendarDay(new Date());
 
     return bills.map((b) => ({
       id: b.id,
@@ -228,7 +225,7 @@ export class RecurringExpenseService {
 
   async findOne(userId: string, id: string) {
     const expense = await this.getExpenseOrThrow(userId, id);
-    const now = dayjs().startOf('day');
+    const now = localCalendarDay(new Date());
 
     return {
       ...expense,
