@@ -145,6 +145,11 @@ export class TransactionService {
             );
           }
 
+          await this.balanceService.updateBookBalance(
+            tx,
+            createTransactionDto.bookId,
+          );
+
           return newTransaction;
         },
       );

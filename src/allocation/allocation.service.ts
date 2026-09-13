@@ -313,6 +313,13 @@ export class AllocationService {
           },
         });
 
+        if (sourceTransactionId) {
+          await tx.transaction.update({
+            where: { id: sourceTransactionId },
+            data: { amount: { decrement: emergencyAllocation } },
+          });
+        }
+
         remaining = remaining.minus(emergencyAllocation);
         allocatedAmount = allocatedAmount.plus(emergencyAllocation);
       }
