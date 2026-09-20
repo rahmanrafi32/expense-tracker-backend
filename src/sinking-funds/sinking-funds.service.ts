@@ -313,14 +313,11 @@ export class SinkingFundService {
     const deadline = dayjs(fund.deadline).startOf('day');
     const { exactMonths, months, days } = getRemainingDuration(now, deadline);
 
-    const totalDaysLeft = Math.max(deadline.diff(now, 'day'), 0);
-
     const difference = fund.targetAmount.minus(fund.savedAmount);
 
     const remaining = difference.gt(0) ? difference : new Prisma.Decimal(0);
 
     let monthlyNeeded = new Prisma.Decimal(0);
-    let dailyNeeded = new Prisma.Decimal(0);
 
     if (remaining.gt(0)) {
       if (months >= 1) {
@@ -333,10 +330,8 @@ export class SinkingFundService {
               )
               .toDecimalPlaces(2)
           : remaining.div(new Prisma.Decimal(exactMonths)).toDecimalPlaces(2);
-      } else if (totalDaysLeft > 0) {
-        dailyNeeded = remaining.div(totalDaysLeft).toDecimalPlaces(2);
       } else {
-        dailyNeeded = remaining;
+        monthlyNeeded = remaining;
       }
     }
 
@@ -351,7 +346,6 @@ export class SinkingFundService {
       progressPct,
       remaining: remaining.toFixed(2),
       monthlyNeeded: monthlyNeeded.toFixed(2),
-      dailyNeeded: dailyNeeded.toFixed(2),
       monthsLeft: months,
       daysLeft: days,
     };
