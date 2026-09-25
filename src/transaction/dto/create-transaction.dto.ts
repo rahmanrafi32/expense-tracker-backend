@@ -1,6 +1,7 @@
 import {
   IsDateString,
   IsDecimal,
+  IsBoolean,
   IsEnum,
   IsNotEmpty,
   IsOptional,
@@ -8,7 +9,7 @@ import {
   IsUUID,
 } from 'class-validator';
 import { TransactionType } from '../enums/transaction-type.enum';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateTransactionDto {
   @ApiProperty({
@@ -42,6 +43,15 @@ export class CreateTransactionDto {
     },
   )
   amount: string;
+
+  @ApiPropertyOptional({
+    example: true,
+    description:
+      'Whether this income should be automatically allocated. Defaults to true for escrow books and false for operating books. Only applies to income transactions.',
+  })
+  @IsOptional()
+  @IsBoolean({ message: 'Auto allocate must be a boolean value' })
+  autoAllocate?: boolean;
 
   @ApiProperty({ example: 'Salary for June', required: false })
   @IsOptional()

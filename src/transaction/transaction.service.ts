@@ -7,7 +7,7 @@ import { PrismaService } from '../database/prisma.service';
 import { CreateTransactionDto } from './dto/create-transaction.dto';
 import { UpdateTransactionDto } from './dto/update-transaction.dto';
 import { TransactionType } from './enums/transaction-type.enum';
-import { Prisma, Transaction } from '@prisma/client';
+import { BookType, Prisma, Transaction } from '@prisma/client';
 import { BalanceService } from '../balance/balance.service';
 import { type TransactionUpdateData } from './types/transaction-update-data.type';
 import { AllocationService } from '../allocation/allocation.service';
@@ -22,13 +22,17 @@ export class TransactionService {
   ) {}
 
   async create(userId: string, createTransactionDto: CreateTransactionDto) {
-    const bookExists = await this.prisma.book.findFirst({
+    const book = await this.prisma.book.findFirst({
       where: { id: createTransactionDto.bookId, userId },
+      select: { type: true },
     });
 
-    if (!bookExists) {
+    if (!book) {
       throw new NotFoundException(`Book not found`);
     }
+
+    const shouldAutoAllocate =
+      createTransactionDto.autoAllocate ?? book.type === BookType.ESCROW;
 
     const decimalAmount = new Prisma.Decimal(createTransactionDto.amount);
 
@@ -128,7 +132,10 @@ export class TransactionService {
             createTransactionDto.bookId,
           );
 
-          if (createTransactionDto.type === TransactionType.INCOME) {
+          if (
+            createTransactionDto.type === TransactionType.INCOME &&
+            shouldAutoAllocate
+          ) {
             await this.allocationService.allocate(
               tx,
               createTransactionDto.bookId,
