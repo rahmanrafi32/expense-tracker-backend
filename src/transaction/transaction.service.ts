@@ -85,7 +85,7 @@ export class TransactionService {
     }
 
     try {
-      return await this.prisma.$transaction(
+      const newTransaction = await this.prisma.$transaction(
         async (tx: Prisma.TransactionClient) => {
           const newTransaction = await tx.transaction.create({
             data: {
@@ -160,6 +160,8 @@ export class TransactionService {
           return newTransaction;
         },
       );
+
+      return this.withBalanceAfterTransaction(newTransaction);
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -271,6 +273,11 @@ export class TransactionService {
         _sum: { amount: true },
       }),
     ]);
+    const balanceAfterTransactionById =
+      await this.getBalanceAfterTransactionById(
+        bookId,
+        transactions.map((transaction) => transaction.id),
+      );
 
     const hasNextPage = transactions.length === limit;
     const nextCursor = hasNextPage ? String(skip + limit) : null;
@@ -280,7 +287,17 @@ export class TransactionService {
     const totalExpense =
       totals.find((t) => t.type === 'EXPENSE')?._sum?.amount ?? 0;
 
-    return { data: transactions, nextCursor, totalIncome, totalExpense };
+    return {
+      data: transactions.map((transaction) => ({
+        ...transaction,
+        balanceAfterTransaction: balanceAfterTransactionById.get(
+          transaction.id,
+        ),
+      })),
+      nextCursor,
+      totalIncome,
+      totalExpense,
+    };
   }
 
   async findOne(userId: string, id: string) {
@@ -308,7 +325,7 @@ export class TransactionService {
       throw new NotFoundException(`Transaction with id ${id} not found`);
     }
 
-    return transaction;
+    return this.withBalanceAfterTransaction(transaction);
   }
 
   async update(
@@ -395,44 +412,48 @@ export class TransactionService {
       updateData.paymentMethodId = paymentMethod.id;
     }
 
-    return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      const updatedTransaction = await tx.transaction.update({
-        where: { id },
-        data: updateData,
-        include: {
-          category: {
-            select: {
-              id: true,
-              name: true,
+    const updatedTransaction = await this.prisma.$transaction(
+      async (tx: Prisma.TransactionClient) => {
+        const updatedTransaction = await tx.transaction.update({
+          where: { id },
+          data: updateData,
+          include: {
+            category: {
+              select: {
+                id: true,
+                name: true,
+              },
             },
-          },
-          paymentMethod: {
-            select: {
-              id: true,
-              name: true,
+            paymentMethod: {
+              select: {
+                id: true,
+                name: true,
+              },
             },
-          },
-          book: {
-            select: {
-              name: true,
-              user: {
-                select: {
-                  id: true,
-                  firstName: true,
-                  lastName: true,
+            book: {
+              select: {
+                name: true,
+                user: {
+                  select: {
+                    id: true,
+                    firstName: true,
+                    lastName: true,
+                  },
                 },
               },
             },
           },
-        },
-      });
-      await this.balanceService.updateBookBalance(
-        tx,
-        existingTransaction.bookId,
-      );
+        });
+        await this.balanceService.updateBookBalance(
+          tx,
+          existingTransaction.bookId,
+        );
 
-      return updatedTransaction;
-    });
+        return updatedTransaction;
+      },
+    );
+
+    return this.withBalanceAfterTransaction(updatedTransaction);
   }
 
   async remove(userId: string, id: string): Promise<Transaction> {
@@ -444,5 +465,65 @@ export class TransactionService {
       await this.balanceService.updateBookBalance(tx, transaction.bookId);
       return deletedTransaction;
     });
+  }
+
+  /**
+   * Returns each transaction's net book balance immediately after it posts.
+   * The full book ledger is used deliberately: list filters and pagination
+   * must not change a transaction's historical balance.
+   */
+  private async getBalanceAfterTransactionById(
+    bookId: string,
+    transactionIds: string[],
+  ): Promise<Map<string, Prisma.Decimal>> {
+    if (transactionIds.length === 0) {
+      return new Map();
+    }
+
+    const balances = await this.prisma.$queryRaw<
+      { id: string; balanceAfterTransaction: Prisma.Decimal }[]
+    >(Prisma.sql`
+      WITH ledger AS (
+        SELECT
+          "id",
+          SUM(
+            CASE
+              WHEN "type" = 'INCOME' THEN "amount"
+              ELSE -"amount"
+            END
+          ) OVER (
+            ORDER BY "date" ASC, "createdAt" ASC, "id" ASC
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+          ) AS "balanceAfterTransaction"
+        FROM "Transaction"
+        WHERE "bookId" = ${bookId}
+      )
+      SELECT "id", "balanceAfterTransaction"
+      FROM ledger
+      WHERE "id" IN (${Prisma.join(transactionIds)})
+    `);
+
+    return new Map(
+      balances.map(({ id, balanceAfterTransaction }) => [
+        id,
+        new Prisma.Decimal(balanceAfterTransaction),
+      ]),
+    );
+  }
+
+  private async withBalanceAfterTransaction<
+    T extends { id: string; bookId: string },
+  >(transaction: T): Promise<T & { balanceAfterTransaction: Prisma.Decimal }> {
+    const balanceAfterTransactionById =
+      await this.getBalanceAfterTransactionById(transaction.bookId, [
+        transaction.id,
+      ]);
+
+    return {
+      ...transaction,
+      balanceAfterTransaction:
+        balanceAfterTransactionById.get(transaction.id) ??
+        new Prisma.Decimal(0),
+    };
   }
 }
