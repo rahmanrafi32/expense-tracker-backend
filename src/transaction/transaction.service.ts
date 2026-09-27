@@ -248,10 +248,18 @@ export class TransactionService {
       };
     }
 
-    let orderBy: Prisma.TransactionOrderByWithRelationInput = { date: 'desc' };
-    if (sortBy === 'date_asc') orderBy = { date: 'asc' };
-    else if (sortBy === 'amount_desc') orderBy = { amount: 'desc' };
-    else if (sortBy === 'amount_asc') orderBy = { amount: 'asc' };
+    let orderBy: Prisma.TransactionOrderByWithRelationInput[] = [
+      { date: 'desc' },
+      { createdAt: 'desc' },
+      { id: 'desc' },
+    ];
+    if (sortBy === 'date_asc') {
+      orderBy = [{ date: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }];
+    } else if (sortBy === 'amount_desc') {
+      orderBy = [{ amount: 'desc' }, { id: 'desc' }];
+    } else if (sortBy === 'amount_asc') {
+      orderBy = [{ amount: 'asc' }, { id: 'asc' }];
+    }
 
     const skip = cursor ? parseInt(cursor, 10) : 0;
 
