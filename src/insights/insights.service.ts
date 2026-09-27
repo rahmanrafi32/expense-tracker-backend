@@ -103,19 +103,26 @@ export class InsightsService {
 
     const categoryMap = new Map(categories.map((c) => [c.id, c.name]));
 
-    const top5 = groupedExpenses.slice(0, 5).map((g) => ({
-      name: g.categoryId
-        ? categoryMap.get(g.categoryId) || 'Uncategorized'
-        : 'Uncategorized',
-      value: new Prisma.Decimal(g._sum.amount ?? 0).toNumber(),
-    }));
+    const breakdown = new Map<string, number>();
 
-    const otherTotal = groupedExpenses
+    for (const expense of groupedExpenses) {
+      const name = expense.categoryId
+        ? (categoryMap.get(expense.categoryId) ?? 'Uncategorized')
+        : 'Uncategorized';
+      const amount = new Prisma.Decimal(expense._sum.amount ?? 0).toNumber();
+
+      breakdown.set(name, (breakdown.get(name) ?? 0) + amount);
+    }
+
+    const categoriesByTotal = Array.from(breakdown, ([name, value]) => ({
+      name,
+      value: Math.round(value * 100) / 100,
+    })).sort((a, b) => b.value - a.value);
+    const top5 = categoriesByTotal.slice(0, 5);
+    const otherTotal = categoriesByTotal
       .slice(5)
-      .reduce(
-        (sum, g) => sum + new Prisma.Decimal(g._sum.amount ?? 0).toNumber(),
-        0,
-      );
+      .reduce((sum, category) => sum + category.value, 0);
+
     if (otherTotal > 0) top5.push({ name: 'Other', value: otherTotal });
 
     return top5;
@@ -197,7 +204,7 @@ export class InsightsService {
     const { startDate, endDate } = this.getMonthDateRange(dto.month, dto.year);
 
     const groupedExpenses = await this.prisma.transaction.groupBy({
-      by: ['paymentMethodId', 'recurringExpenseId'],
+      by: ['paymentMethodId'],
       where: {
         bookId: dto.bookId,
         type: TransactionType.EXPENSE,
@@ -212,38 +219,28 @@ export class InsightsService {
     const methodIds = groupedExpenses
       .map((g) => g.paymentMethodId)
       .filter(Boolean) as string[];
-    const recurringIds = groupedExpenses
-      .map((g) => g.recurringExpenseId)
-      .filter(Boolean) as string[];
 
-    const [methods, recurringExpenses] = await Promise.all([
-      this.prisma.paymentMethod.findMany({
-        where: { id: { in: methodIds } },
-        select: { id: true, name: true },
-      }),
-      this.prisma.reccuringExpenses.findMany({
-        where: { id: { in: recurringIds } },
-        select: { id: true, name: true },
-      }),
-    ]);
+    const methods = await this.prisma.paymentMethod.findMany({
+      where: { id: { in: methodIds } },
+      select: { id: true, name: true },
+    });
 
     const methodMap = new Map(methods.map((m) => [m.id, m.name]));
-    const recurringMap = new Map(recurringExpenses.map((r) => [r.id, r.name]));
+    const breakdown = new Map<string, number>();
 
-    return groupedExpenses.map((g) => {
-      let name = 'Unspecified';
+    for (const expense of groupedExpenses) {
+      const name = expense.paymentMethodId
+        ? (methodMap.get(expense.paymentMethodId) ?? 'Unspecified')
+        : 'Unspecified';
+      const amount = new Prisma.Decimal(expense._sum.amount ?? 0).toNumber();
 
-      if (g.paymentMethodId) {
-        name = methodMap.get(g.paymentMethodId) || 'Unspecified';
-      } else if (g.recurringExpenseId) {
-        name = recurringMap.get(g.recurringExpenseId) || 'Recurring Bill';
-      }
+      breakdown.set(name, (breakdown.get(name) ?? 0) + amount);
+    }
 
-      return {
-        name,
-        value: new Prisma.Decimal(g._sum.amount ?? 0).toNumber(),
-      };
-    });
+    return Array.from(breakdown, ([name, value]) => ({
+      name,
+      value: Math.round(value * 100) / 100,
+    })).sort((a, b) => b.value - a.value);
   }
 
   async getTopTransactions(userId: string, dto: MonthlyInsightDto) {
