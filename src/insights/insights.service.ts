@@ -10,7 +10,10 @@ export class InsightsService {
 
   private getMonthDateRange(month: number, year: number) {
     const startDate = dayjs(`${year}-${month}-01`).startOf('month').toDate();
-    const endDate = dayjs(`${year}-${month}-01`).endOf('month').toDate();
+    const endDate = dayjs(`${year}-${month}-01`)
+      .add(1, 'month')
+      .startOf('month')
+      .toDate();
     return { startDate, endDate };
   }
 
@@ -27,11 +30,18 @@ export class InsightsService {
     await this.ensureBookOwnership(userId, dto.bookId);
     const { startDate, endDate } = this.getMonthDateRange(dto.month, dto.year);
 
-    const totals = await this.prisma.transaction.groupBy({
-      by: ['type'],
-      where: { bookId: dto.bookId, date: { gte: startDate, lte: endDate } },
-      _sum: { amount: true },
-    });
+    const [totals, openingTotals] = await Promise.all([
+      this.prisma.transaction.groupBy({
+        by: ['type'],
+        where: { bookId: dto.bookId, date: { gte: startDate, lt: endDate } },
+        _sum: { amount: true },
+      }),
+      this.prisma.transaction.groupBy({
+        by: ['type'],
+        where: { bookId: dto.bookId, date: { lt: startDate } },
+        _sum: { amount: true },
+      }),
+    ]);
 
     const totalIncome = new Prisma.Decimal(
       totals.find((t) => t.type === TransactionType.INCOME)?._sum.amount ?? 0,
@@ -39,6 +49,18 @@ export class InsightsService {
     const totalExpense = new Prisma.Decimal(
       totals.find((t) => t.type === TransactionType.EXPENSE)?._sum.amount ?? 0,
     ).toNumber();
+    const openingIncome = new Prisma.Decimal(
+      openingTotals.find((t) => t.type === TransactionType.INCOME)?._sum
+        .amount ?? 0,
+    ).toNumber();
+    const openingExpense = new Prisma.Decimal(
+      openingTotals.find((t) => t.type === TransactionType.EXPENSE)?._sum
+        .amount ?? 0,
+    ).toNumber();
+    const openingBalance = openingIncome - openingExpense;
+    const availableCash = openingBalance + totalIncome;
+    const closingBalance = availableCash - totalExpense;
+    const cashShortfall = Math.max(0, -closingBalance);
     const netSavings = totalIncome - totalExpense;
     const savingsRate = totalIncome > 0 ? (netSavings / totalIncome) * 100 : 0;
 
@@ -47,6 +69,10 @@ export class InsightsService {
       totalExpense,
       netSavings,
       savingsRate: Math.round(savingsRate * 100) / 100,
+      openingBalance: Math.round(openingBalance * 100) / 100,
+      availableCash: Math.round(availableCash * 100) / 100,
+      closingBalance: Math.round(closingBalance * 100) / 100,
+      cashShortfall: Math.round(cashShortfall * 100) / 100,
     };
   }
 
@@ -59,7 +85,7 @@ export class InsightsService {
       where: {
         bookId: dto.bookId,
         type: TransactionType.EXPENSE,
-        date: { gte: startDate, lte: endDate },
+        date: { gte: startDate, lt: endDate },
       },
       _sum: { amount: true },
       orderBy: { _sum: { amount: 'desc' } },
@@ -98,10 +124,13 @@ export class InsightsService {
   async getYearlyTrend(userId: string, dto: YearlyInsightDto) {
     await this.ensureBookOwnership(userId, dto.bookId);
     const startDate = dayjs(`${dto.year}-01-01`).startOf('year').toDate();
-    const endDate = dayjs(`${dto.year}-12-31`).endOf('year').toDate();
+    const endDate = dayjs(`${dto.year}-01-01`)
+      .add(1, 'year')
+      .startOf('year')
+      .toDate();
 
     const transactions = await this.prisma.transaction.findMany({
-      where: { bookId: dto.bookId, date: { gte: startDate, lte: endDate } },
+      where: { bookId: dto.bookId, date: { gte: startDate, lt: endDate } },
       select: { type: true, amount: true, date: true },
     });
 
@@ -141,7 +170,7 @@ export class InsightsService {
       where: {
         bookId: dto.bookId,
         type: TransactionType.EXPENSE,
-        date: { gte: startDate, lte: endDate },
+        date: { gte: startDate, lt: endDate },
       },
       select: { amount: true, recurringExpenseId: true },
     });
@@ -172,7 +201,7 @@ export class InsightsService {
       where: {
         bookId: dto.bookId,
         type: TransactionType.EXPENSE,
-        date: { gte: startDate, lte: endDate },
+        date: { gte: startDate, lt: endDate },
       },
       _sum: { amount: true },
       orderBy: { _sum: { amount: 'desc' } },
@@ -225,7 +254,7 @@ export class InsightsService {
       where: {
         bookId: dto.bookId,
         type: TransactionType.EXPENSE,
-        date: { gte: startDate, lte: endDate },
+        date: { gte: startDate, lt: endDate },
       },
       orderBy: { amount: 'desc' },
       take: 5,

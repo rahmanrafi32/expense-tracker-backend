@@ -385,13 +385,13 @@ List responses include `progressPct`, `remaining`, `monthlyNeeded`, `monthsLeft`
 | --- | --- | --- |
 | `GET` | `/cash-flow?bookId=<bookId>&days=<days>` | Project a daily cash-flow timeline |
 
-`days` defaults to `90` and must be between `30` and `365`. Projections consider monthly income, expected monthly expenses, recurring bills, and unfunded sinking-fund deadlines. Each item contains `date`, `balance`, and `isShortfall`.
+`days` defaults to `90` and must be between `30` and `365`. Projections start from the balance represented by transactions through today, then consider future-dated transactions, recurring bills, unfunded sinking-fund deadlines, and average ordinary spending. Income defaults to the average of the three prior completed calendar months (including zero-income months); a planned income transaction replaces that estimate for its month. Books with no income history fall back to their configured monthly income. Each item contains `date`, `balance`, and `isShortfall`.
 
 ## Spending trends API
 
 | Method | Endpoint | Description |
 | --- | --- | --- |
-| `GET` | `/spending-trends?bookId=<bookId>` | Compare spending with expected monthly expenses |
+| `GET` | `/spending-trends?bookId=<bookId>` | Compare three-month ordinary spending and income averages |
 
 ## Notifications and cron
 
@@ -404,7 +404,7 @@ and sends reminder emails through Resend using `CRON_SECRET` for authorization.
 | Method | Endpoint | Description |
 | --- | --- | --- |
 | `GET` | `/insights/monthly-dashboard?bookId=<bookId>&month=<month>&year=<year>` | Combined monthly dashboard |
-| `GET` | `/insights/monthly-overview?bookId=<bookId>&month=<month>&year=<year>` | Income, expenses, savings, savings rate |
+| `GET` | `/insights/monthly-overview?bookId=<bookId>&month=<month>&year=<year>` | Income, expenses, savings, savings rate, and carryover-aware cash availability |
 | `GET` | `/insights/category-breakdown?bookId=<bookId>&month=<month>&year=<year>` | Top expense categories |
 | `GET` | `/insights/yearly-trend?bookId=<bookId>&year=<year>` | Monthly income, expenses, and net |
 

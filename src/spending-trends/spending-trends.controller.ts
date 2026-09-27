@@ -13,7 +13,9 @@ export class SpendingTrendsController {
   constructor(private readonly spendingTrendsService: SpendingTrendsService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Get spending trend analysis' })
+  @ApiOperation({
+    summary: 'Get three-month ordinary spending and income trend analysis',
+  })
   findAll(@Req() req: AuthenticatedRequest, @Query() dto: GetSpendingTrendDto) {
     return this.spendingTrendsService.getSpendingTrend(
       req.user.userId,
