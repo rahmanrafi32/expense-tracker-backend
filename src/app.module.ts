@@ -19,6 +19,7 @@ import { EmailNotificationModule } from './email-notification/email-notification
 import { CloudinaryModule } from './cloudinary/cloudinary.module';
 import { CronModule } from './cron/cron.module';
 import { AllocationModule } from './allocation/allocation.module';
+import { HealthController } from './health/health.controller';
 
 @Module({
   imports: [
@@ -43,7 +44,7 @@ import { AllocationModule } from './allocation/allocation.module';
     CronModule,
     AllocationModule,
   ],
-  controllers: [],
+  controllers: [HealthController],
   providers: [],
 })
 export class AppModule {}
