@@ -4,7 +4,11 @@ import dayjs, { Dayjs } from 'dayjs';
 
 import { PrismaService } from '../database/prisma.service';
 import { EmailNotificationService } from '../email-notification/email-notification.service';
-import { daysUntilLocalCalendarDay, localCalendarDay } from '../utils/date';
+import {
+  APP_TIMEZONE,
+  daysUntilLocalCalendarDay,
+  localCalendarDay,
+} from '../utils/date';
 
 interface ReminderExpense {
   id: string;
@@ -36,7 +40,7 @@ export class NotificationService {
   ) {}
 
   async processDailyNotifications() {
-    const now = dayjs().startOf('day');
+    const now = dayjs().tz(APP_TIMEZONE).startOf('day');
 
     this.logger.log(
       `Starting daily notification processing for ${now.format('YYYY-MM-DD')}`,
@@ -73,13 +77,15 @@ export class NotificationService {
   }
 
   private async refreshRecurringPaymentStatuses(now: Dayjs) {
-    const statusWindowEnd = now.add(7, 'day').endOf('day');
+    const dueMonthStart = now.startOf('month');
+    const dueMonthEnd = now.endOf('month');
 
     const result = await this.prisma.reccuringExpenses.updateMany({
       where: {
         status: ExpenseStatus.PAID,
         nextDueDate: {
-          lte: statusWindowEnd.toDate(),
+          gte: dueMonthStart.toDate(),
+          lte: dueMonthEnd.toDate(),
         },
       },
       data: {
@@ -89,7 +95,7 @@ export class NotificationService {
 
     this.logger.log(
       `Reset ${result.count} recurring payment status(es) to UNPAID ` +
-        `for bills due within 7 days or already overdue`,
+        `for bills due in ${now.format('MMMM YYYY')}`,
     );
 
     return { updated: result.count };
