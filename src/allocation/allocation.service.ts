@@ -75,6 +75,7 @@ export class AllocationService {
       .toDecimalPlaces(2);
 
     const allocationDay = dayjs(allocationDate).startOf('month');
+    const deadlineDay = dayjs(fund.deadline).startOf('month');
     const cycleStartedAt = dayjs(fund.cycleStartedAt ?? fund.createdAt);
 
     const monthsSinceCycleStart = Math.max(
@@ -104,10 +105,9 @@ export class AllocationService {
     const alreadyAllocatedThisPeriod =
       deposits._sum.amount ?? new Prisma.Decimal(0);
 
-    const monthlyCapacity = Prisma.Decimal.min(
-      normalMonthlyAmount,
-      remainingAmount,
-    );
+    const monthlyCapacity = deadlineDay.isAfter(allocationDay, 'month')
+      ? Prisma.Decimal.min(normalMonthlyAmount, remainingAmount)
+      : remainingAmount;
     const allocationRequired = Prisma.Decimal.max(
       monthlyCapacity.minus(alreadyAllocatedThisPeriod),
       new Prisma.Decimal(0),
@@ -214,8 +214,6 @@ export class AllocationService {
         return existingBatch;
       }
     }
-
-    await this.reconcileBook(tx, bookId, allocationDate);
 
     const batch = await tx.allocationBatch.create({
       data: {
@@ -327,126 +325,6 @@ export class AllocationService {
 
     remaining = new Prisma.Decimal(reconciledBatch.unallocatedAmount);
     allocatedAmount = amount.minus(remaining);
-
-    if (remaining.gt(0)) {
-      const sinkingFunds = await tx.sinkingFund.findMany({
-        where: {
-          bookId,
-          recurringExpenseId: {
-            not: null,
-          },
-        },
-        include: {
-          recurringExpense: {
-            select: {
-              frequency: true,
-            },
-          },
-        },
-        orderBy: {
-          deadline: 'asc',
-        },
-      });
-
-      for (const fund of sinkingFunds) {
-        if (remaining.isZero()) {
-          break;
-        }
-
-        const requirement = await this.calculateSinkingFundRequirement(
-          tx,
-          fund,
-          allocationDate,
-        );
-
-        if (requirement.remainingAmount.lte(0)) {
-          continue;
-        }
-
-        const currentFund = await tx.sinkingFund.findUnique({
-          where: {
-            id: fund.id,
-          },
-          select: {
-            targetAmount: true,
-            savedAmount: true,
-          },
-        });
-
-        if (!currentFund) {
-          continue;
-        }
-
-        const currentTarget = new Prisma.Decimal(currentFund.targetAmount);
-        const currentSaved = new Prisma.Decimal(currentFund.savedAmount);
-
-        const currentRemaining = Prisma.Decimal.max(
-          currentTarget.minus(currentSaved),
-          new Prisma.Decimal(0),
-        );
-
-        if (currentRemaining.isZero()) {
-          continue;
-        }
-
-        const allocationAmount = Prisma.Decimal.min(
-          remaining,
-          currentRemaining,
-          requirement.allocationRequired.isZero()
-            ? currentRemaining
-            : requirement.allocationRequired,
-        );
-
-        if (
-          !requirement.allocationRequired.isZero() &&
-          allocationAmount.lt(requirement.allocationRequired) &&
-          allocationAmount.lt(currentRemaining)
-        ) {
-          continue;
-        }
-
-        if (allocationAmount.lte(0)) {
-          continue;
-        }
-
-        await tx.reserveAllocation.create({
-          data: {
-            batchId: batch.id,
-            type: 'SINKING_FUND',
-            amount: allocationAmount,
-            sinkingFundId: fund.id,
-            note: `Automatic allocation for ${fund.name}`,
-          },
-        });
-
-        await tx.sinkingFundDeposit.create({
-          data: {
-            sinkingFundId: fund.id,
-            amount: allocationAmount,
-            date: allocationDate,
-            note: 'Automatic allocation',
-          },
-        });
-
-        await tx.sinkingFund.update({
-          where: {
-            id: fund.id,
-          },
-          data: {
-            savedAmount: {
-              increment: allocationAmount,
-            },
-          },
-        });
-
-        remaining = Prisma.Decimal.max(
-          remaining.minus(allocationAmount),
-          new Prisma.Decimal(0),
-        );
-
-        allocatedAmount = allocatedAmount.plus(allocationAmount);
-      }
-    }
 
     if (remaining.gt(0)) {
       const goals = await tx.goal.findMany({
