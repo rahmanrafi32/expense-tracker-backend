@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, TransactionType } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { SpendingTrendsService } from '../spending-trends/spending-trends.service';
 import { GetCashFlowDto, CashFlowDayDto } from './dto/cash-flow-query.dto';
@@ -13,140 +13,192 @@ export class CashFlowService {
     private readonly spendingTrendsService: SpendingTrendsService,
   ) {}
 
+  private addEvent(
+    events: Map<string, Prisma.Decimal>,
+    date: dayjs.Dayjs,
+    amount: Prisma.Decimal,
+  ) {
+    const dateKey = date.format('YYYY-MM-DD');
+    events.set(
+      dateKey,
+      (events.get(dateKey) ?? new Prisma.Decimal(0)).plus(amount),
+    );
+  }
+
   async getTimeline(
     userId: string,
     dto: GetCashFlowDto,
   ): Promise<CashFlowDayDto[]> {
     const daysToProject = dto.days || 90;
+    const today = dayjs().startOf('day');
+    const projectionStartDate = today.add(1, 'day');
+    const endDate = today.add(daysToProject, 'day');
+
     const book = await this.prisma.book.findFirst({
       where: { id: dto.bookId, userId },
+      select: {
+        monthlyIncome: true,
+        expectedMonthlyExpenses: true,
+      },
     });
 
     if (!book) throw new NotFoundException('Book not found');
 
-    const startDate = dayjs().startOf('day');
-    const endDate = startDate.add(daysToProject, 'day');
-    const timeline: CashFlowDayDto[] = [];
+    const [
+      spendingTrend,
+      balanceTotals,
+      futureTransactions,
+      recurringBills,
+      sinkingFunds,
+    ] = await Promise.all([
+      this.spendingTrendsService.getSpendingTrendForBook(dto.bookId),
+      this.prisma.transaction.groupBy({
+        by: ['type'],
+        where: {
+          bookId: dto.bookId,
+          date: { lte: today.endOf('day').toDate() },
+        },
+        _sum: { amount: true },
+      }),
+      this.prisma.transaction.findMany({
+        where: {
+          bookId: dto.bookId,
+          date: {
+            gte: projectionStartDate.toDate(),
+            lte: endDate.endOf('day').toDate(),
+          },
+        },
+        select: { type: true, amount: true, date: true },
+      }),
+      this.prisma.reccuringExpenses.findMany({
+        where: {
+          bookId: dto.bookId,
+          nextDueDate: { lte: endDate.endOf('day').toDate() },
+        },
+      }),
+      this.prisma.sinkingFund.findMany({
+        where: {
+          bookId: dto.bookId,
+          deadline: {
+            gte: projectionStartDate.toDate(),
+            lte: endDate.endOf('day').toDate(),
+          },
+          savedAmount: { lt: this.prisma.sinkingFund.fields.targetAmount },
+        },
+      }),
+    ]);
 
-    const spendingTrend = await this.spendingTrendsService.getSpendingTrend(
-      userId,
-      dto.bookId,
+    const incomeTotal = new Prisma.Decimal(
+      balanceTotals.find((total) => total.type === TransactionType.INCOME)?._sum
+        .amount ?? 0,
     );
+    const expenseTotal = new Prisma.Decimal(
+      balanceTotals.find((total) => total.type === TransactionType.EXPENSE)
+        ?._sum.amount ?? 0,
+    );
+    let currentBalance = incomeTotal.minus(expenseTotal);
 
-    const recurringBills = await this.prisma.reccuringExpenses.findMany({
-      where: {
-        bookId: dto.bookId,
-        nextDueDate: { lte: endDate.toDate() },
-      },
-    });
+    const transactionEvents = new Map<string, Prisma.Decimal>();
+    const incomeMonthsWithPlans = new Set<string>();
+    for (const transaction of futureTransactions) {
+      const transactionDate = dayjs(transaction.date).startOf('day');
+      const amount = new Prisma.Decimal(transaction.amount);
+      const signedAmount =
+        transaction.type === TransactionType.INCOME ? amount : amount.negated();
 
-    const sinkingFunds = await this.prisma.sinkingFund.findMany({
-      where: {
-        bookId: dto.bookId,
-        deadline: { lte: endDate.toDate() },
-        savedAmount: { lt: this.prisma.sinkingFund.fields.targetAmount },
-      },
-    });
-
-    const incomeEvents = new Map<string, number>();
-    const billEvents = new Map<string, number>();
-    const sinkingEvents = new Map<string, number>();
-
-    let currentMonth = startDate.startOf('month');
-    while (
-      currentMonth.isBefore(endDate) ||
-      currentMonth.isSame(endDate, 'month')
-    ) {
-      incomeEvents.set(
-        currentMonth.format('YYYY-MM-DD'),
-        new Prisma.Decimal(book.monthlyIncome).toNumber(),
-      );
-      currentMonth = currentMonth.add(1, 'month');
+      this.addEvent(transactionEvents, transactionDate, signedAmount);
+      if (transaction.type === TransactionType.INCOME) {
+        incomeMonthsWithPlans.add(transactionDate.format('YYYY-MM'));
+      }
     }
 
+    const syntheticIncomeEvents = new Map<string, Prisma.Decimal>();
+    const incomeProjection =
+      spendingTrend.monthsWithIncome > 0
+        ? new Prisma.Decimal(spendingTrend.averageMonthlyIncome)
+        : new Prisma.Decimal(book.monthlyIncome);
+    let incomeMonth = projectionStartDate.startOf('month');
+    if (incomeMonth.isSame(today, 'month')) {
+      incomeMonth = incomeMonth.add(1, 'month');
+    }
+    while (
+      incomeMonth.isBefore(endDate) ||
+      incomeMonth.isSame(endDate, 'month')
+    ) {
+      if (!incomeMonthsWithPlans.has(incomeMonth.format('YYYY-MM'))) {
+        this.addEvent(syntheticIncomeEvents, incomeMonth, incomeProjection);
+      }
+      incomeMonth = incomeMonth.add(1, 'month');
+    }
+
+    const billEvents = new Map<string, Prisma.Decimal>();
     for (const bill of recurringBills) {
       let billDueDate = dayjs(bill.nextDueDate).startOf('day');
+      const frequencyMonths = EXPENSE_FREQUENCY_MONTHS[bill.frequency];
+
+      while (billDueDate.isBefore(projectionStartDate, 'day')) {
+        billDueDate = billDueDate.add(frequencyMonths, 'month');
+      }
 
       while (
-        billDueDate.isBefore(endDate) ||
+        billDueDate.isBefore(endDate, 'day') ||
         billDueDate.isSame(endDate, 'day')
       ) {
-        const dateKey = billDueDate.format('YYYY-MM-DD');
-        billEvents.set(
-          dateKey,
-          (billEvents.get(dateKey) || 0) +
-            new Prisma.Decimal(bill.amount).toNumber(),
-        );
-
-        billDueDate = billDueDate.add(
-          EXPENSE_FREQUENCY_MONTHS[bill.frequency],
-          'month',
-        );
+        this.addEvent(billEvents, billDueDate, new Prisma.Decimal(bill.amount));
+        billDueDate = billDueDate.add(frequencyMonths, 'month');
       }
     }
 
+    const sinkingEvents = new Map<string, Prisma.Decimal>();
     for (const fund of sinkingFunds) {
-      const deadline = dayjs(fund.deadline).startOf('day');
-      if (deadline.isAfter(endDate)) continue;
-
-      const remaining = fund.targetAmount.minus(fund.savedAmount);
+      const remaining = new Prisma.Decimal(fund.targetAmount).minus(
+        new Prisma.Decimal(fund.savedAmount),
+      );
       if (remaining.gt(0)) {
-        const dateKey = deadline.format('YYYY-MM-DD');
-        sinkingEvents.set(
-          dateKey,
-          (sinkingEvents.get(dateKey) || 0) + remaining.toNumber(),
+        this.addEvent(
+          sinkingEvents,
+          dayjs(fund.deadline).startOf('day'),
+          remaining,
         );
       }
     }
 
-    let currentBalance = new Prisma.Decimal(book.bookTotalAmount).toNumber();
-    let currentDate = startDate;
+    const effectiveMonthlyExpense =
+      spendingTrend.monthsWithExpense > 0
+        ? new Prisma.Decimal(spendingTrend.averageMonthly)
+        : new Prisma.Decimal(book.expectedMonthlyExpenses);
+    const timeline: CashFlowDayDto[] = [
+      {
+        date: today.format('YYYY-MM-DD'),
+        balance: currentBalance.toDecimalPlaces(2).toNumber(),
+        isShortfall: currentBalance.isNegative(),
+      },
+    ];
 
+    let currentDate = projectionStartDate;
     while (
-      currentDate.isBefore(endDate) ||
+      currentDate.isBefore(endDate, 'day') ||
       currentDate.isSame(endDate, 'day')
     ) {
       const dateKey = currentDate.format('YYYY-MM-DD');
-      const daysInMonth = currentDate.daysInMonth();
+      currentBalance = currentBalance
+        .plus(transactionEvents.get(dateKey) ?? new Prisma.Decimal(0))
+        .plus(syntheticIncomeEvents.get(dateKey) ?? new Prisma.Decimal(0))
+        .minus(billEvents.get(dateKey) ?? new Prisma.Decimal(0))
+        .minus(sinkingEvents.get(dateKey) ?? new Prisma.Decimal(0));
 
-      if (incomeEvents.has(dateKey)) {
-        currentBalance += incomeEvents.get(dateKey)!;
-      }
-
-      if (billEvents.has(dateKey)) {
-        currentBalance -= billEvents.get(dateKey)!;
-      }
-
-      if (sinkingEvents.has(dateKey)) {
-        currentBalance -= sinkingEvents.get(dateKey)!;
-      }
-
-      const effectiveMonthly =
-        spendingTrend.averageMonthly > 0
-          ? spendingTrend.averageMonthly
-          : new Prisma.Decimal(book.expectedMonthlyExpenses).toNumber();
-
-      const dailyBurnRate = effectiveMonthly / daysInMonth;
-      currentBalance -= dailyBurnRate;
-
-      currentBalance = Math.round(currentBalance * 100) / 100;
+      const dailyBurnRate = effectiveMonthlyExpense.div(
+        currentDate.daysInMonth(),
+      );
+      currentBalance = currentBalance.minus(dailyBurnRate);
 
       timeline.push({
         date: dateKey,
-        balance: currentBalance,
-        isShortfall: currentBalance < 0,
+        balance: currentBalance.toDecimalPlaces(2).toNumber(),
+        isShortfall: currentBalance.isNegative(),
       });
 
       currentDate = currentDate.add(1, 'day');
-    }
-
-    const firstEventIndex = timeline.findIndex(
-      (day) =>
-        day.balance !== new Prisma.Decimal(book.bookTotalAmount).toNumber(),
-    );
-
-    if (firstEventIndex > 7) {
-      return timeline.slice(firstEventIndex - 7);
     }
 
     return timeline;

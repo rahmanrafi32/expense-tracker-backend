@@ -22,7 +22,10 @@ export class InsightsController {
 
   @Get('monthly-dashboard')
   @UsePipes(new ValidationPipe({ transform: true }))
-  @ApiOperation({ summary: 'Get monthly financial dashboard insights' })
+  @ApiOperation({
+    summary:
+      'Get monthly financial dashboard insights with carryover-aware cash availability',
+  })
   async getMonthlyDashboard(
     @Req() req: AuthenticatedRequest,
     @Query() dto: MonthlyInsightDto,
@@ -52,6 +55,10 @@ export class InsightsController {
 
   @Get('monthly-overview')
   @UsePipes(new ValidationPipe({ transform: true }))
+  @ApiOperation({
+    summary:
+      'Get monthly income, spending, and carryover-aware cash availability',
+  })
   async getMonthlyOverview(
     @Req() req: AuthenticatedRequest,
     @Query() dto: MonthlyInsightDto,

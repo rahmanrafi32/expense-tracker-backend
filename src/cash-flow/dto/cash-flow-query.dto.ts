@@ -9,7 +9,8 @@ export class GetCashFlowDto {
 
   @ApiProperty({
     example: 90,
-    description: 'Number of days to project',
+    description:
+      'Number of days to project using historical income and ordinary-spending averages',
     required: false,
     default: 90,
   })
