@@ -75,18 +75,6 @@ export class AllocationService {
       .toDecimalPlaces(2);
 
     const allocationDay = dayjs(allocationDate).startOf('month');
-    const deadlineDay = dayjs(fund.deadline).startOf('month');
-
-    let remainingMonths = deadlineDay.diff(allocationDay, 'month');
-
-    if (remainingMonths <= 0) {
-      remainingMonths = 1;
-    }
-
-    const requiredMonthlyAmount = remainingAmount
-      .div(remainingMonths)
-      .toDecimalPlaces(2);
-
     const cycleStartedAt = dayjs(fund.cycleStartedAt ?? fund.createdAt);
 
     const monthsSinceCycleStart = Math.max(
@@ -116,10 +104,10 @@ export class AllocationService {
     const alreadyAllocatedThisPeriod =
       deposits._sum.amount ?? new Prisma.Decimal(0);
 
-    const monthlyCapacity =
-      remainingMonths <= 1
-        ? remainingAmount
-        : Prisma.Decimal.min(normalMonthlyAmount, remainingAmount);
+    const monthlyCapacity = Prisma.Decimal.min(
+      normalMonthlyAmount,
+      remainingAmount,
+    );
     const allocationRequired = Prisma.Decimal.max(
       monthlyCapacity.minus(alreadyAllocatedThisPeriod),
       new Prisma.Decimal(0),
@@ -127,8 +115,6 @@ export class AllocationService {
 
     return {
       remainingAmount,
-      normalMonthlyAmount,
-      requiredMonthlyAmount,
       alreadyAllocatedThisPeriod,
       allocationRequired,
     };
@@ -229,7 +215,6 @@ export class AllocationService {
       }
     }
 
-    // Reuse older unallocated money before processing the new income.
     await this.reconcileBook(tx, bookId, allocationDate);
 
     const batch = await tx.allocationBatch.create({
@@ -324,6 +309,24 @@ export class AllocationService {
         allocatedAmount = allocatedAmount.plus(emergencyAllocation);
       }
     }
+
+    await tx.allocationBatch.update({
+      where: { id: batch.id },
+      data: {
+        allocatedAmount,
+        unallocatedAmount: remaining,
+      },
+    });
+
+    await this.reconcileBook(tx, bookId, allocationDate);
+
+    const reconciledBatch = await tx.allocationBatch.findUniqueOrThrow({
+      where: { id: batch.id },
+      select: { unallocatedAmount: true },
+    });
+
+    remaining = new Prisma.Decimal(reconciledBatch.unallocatedAmount);
+    allocatedAmount = amount.minus(remaining);
 
     if (remaining.gt(0)) {
       const sinkingFunds = await tx.sinkingFund.findMany({
@@ -569,7 +572,6 @@ export class AllocationService {
     });
   }
 
-  /** Consumes unallocated income when money is spent outside a reserve. */
   async consumeUnallocated(
     tx: Prisma.TransactionClient,
     bookId: string,
@@ -605,7 +607,6 @@ export class AllocationService {
     }
   }
 
-  /** Reconciles money that was previously left unallocated in this book. */
   async reconcileBook(
     tx: Prisma.TransactionClient,
     bookId: string,
@@ -624,78 +625,98 @@ export class AllocationService {
       },
     });
 
-    for (const batch of batches) {
-      let remaining = new Prisma.Decimal(batch.unallocatedAmount);
+    const availableBatches = batches.map((batch) => ({
+      id: batch.id,
+      unallocatedAmount: new Prisma.Decimal(batch.unallocatedAmount),
+    }));
 
-      for (const fund of funds) {
-        if (remaining.isZero()) break;
+    for (const fund of funds) {
+      const availableAmount = availableBatches.reduce(
+        (total, batch) => total.plus(batch.unallocatedAmount),
+        new Prisma.Decimal(0),
+      );
 
-        const current = await tx.sinkingFund.findUnique({
-          where: { id: fund.id },
-          select: { targetAmount: true, savedAmount: true, name: true },
-        });
-        if (!current) continue;
+      if (availableAmount.isZero()) break;
 
-        const remainingTarget = Prisma.Decimal.max(
-          new Prisma.Decimal(current.targetAmount).minus(current.savedAmount),
-          new Prisma.Decimal(0),
+      const current = await tx.sinkingFund.findUnique({
+        where: { id: fund.id },
+        select: { targetAmount: true, savedAmount: true, name: true },
+      });
+      if (!current) continue;
+
+      const remainingTarget = Prisma.Decimal.max(
+        new Prisma.Decimal(current.targetAmount).minus(current.savedAmount),
+        new Prisma.Decimal(0),
+      );
+      const requirement = fund.recurringExpense
+        ? await this.calculateSinkingFundRequirement(
+            tx,
+            { ...fund, savedAmount: current.savedAmount },
+            allocationDate,
+          )
+        : null;
+      const scheduledContribution =
+        requirement?.allocationRequired ?? remainingTarget;
+      const allocationAmount = Prisma.Decimal.min(
+        availableAmount,
+        remainingTarget,
+        scheduledContribution,
+      );
+
+      if (
+        fund.recurringExpense &&
+        allocationAmount.lt(scheduledContribution) &&
+        allocationAmount.lt(remainingTarget)
+      ) {
+        continue;
+      }
+
+      if (allocationAmount.isZero()) continue;
+
+      let amountToAllocate = allocationAmount;
+
+      for (const batch of availableBatches) {
+        if (amountToAllocate.isZero()) break;
+        if (batch.unallocatedAmount.isZero()) continue;
+
+        const contribution = Prisma.Decimal.min(
+          batch.unallocatedAmount,
+          amountToAllocate,
         );
-        const requirement = fund.recurringExpense
-          ? await this.calculateSinkingFundRequirement(
-              tx,
-              { ...fund, savedAmount: current.savedAmount },
-              allocationDate,
-            )
-          : null;
-        const monthlyEquivalent =
-          requirement?.allocationRequired ?? remainingTarget;
-        const allocationAmount = Prisma.Decimal.min(
-          remaining,
-          remainingTarget,
-          monthlyEquivalent,
-        );
-
-        if (
-          fund.recurringExpense &&
-          allocationAmount.lt(monthlyEquivalent) &&
-          allocationAmount.lt(remainingTarget)
-        ) {
-          continue;
-        }
-
-        if (allocationAmount.isZero()) continue;
 
         await tx.reserveAllocation.create({
           data: {
             batchId: batch.id,
             type: 'SINKING_FUND',
             sinkingFundId: fund.id,
-            amount: allocationAmount,
+            amount: contribution,
             note: `Automatic allocation for ${current.name}`,
           },
         });
         await tx.sinkingFundDeposit.create({
           data: {
             sinkingFundId: fund.id,
-            amount: allocationAmount,
+            amount: contribution,
             date: allocationDate,
             note: 'Automatic allocation',
           },
         });
-        await tx.sinkingFund.update({
-          where: { id: fund.id },
-          data: { savedAmount: { increment: allocationAmount } },
-        });
-
-        remaining = remaining.minus(allocationAmount);
         await tx.allocationBatch.update({
           where: { id: batch.id },
           data: {
-            allocatedAmount: { increment: allocationAmount },
-            unallocatedAmount: { decrement: allocationAmount },
+            allocatedAmount: { increment: contribution },
+            unallocatedAmount: { decrement: contribution },
           },
         });
+
+        batch.unallocatedAmount = batch.unallocatedAmount.minus(contribution);
+        amountToAllocate = amountToAllocate.minus(contribution);
       }
+
+      await tx.sinkingFund.update({
+        where: { id: fund.id },
+        data: { savedAmount: { increment: allocationAmount } },
+      });
     }
   }
 
