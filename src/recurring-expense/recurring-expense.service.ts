@@ -437,9 +437,13 @@ export class RecurringExpenseService {
             cycleStartedAt: paymentDate.toDate(),
           },
         });
+      } else {
+        await this.allocationService.consumeUnallocated(
+          tx,
+          expense.bookId,
+          new Prisma.Decimal(expense.amount),
+        );
       }
-
-      await this.allocationService.reconcileBook(tx, expense.bookId);
 
       await this.balanceService.updateBookBalance(tx, expense.bookId);
 

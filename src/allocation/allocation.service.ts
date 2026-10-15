@@ -78,16 +78,18 @@ export class AllocationService {
     const deadlineDay = dayjs(fund.deadline).startOf('month');
     const cycleStartedAt = dayjs(fund.cycleStartedAt ?? fund.createdAt);
 
-    const monthsSinceCycleStart = Math.max(
-      allocationDay.diff(cycleStartedAt.startOf('month'), 'month'),
-      0,
-    );
+    if (dayjs(allocationDate).isBefore(cycleStartedAt)) {
+      return {
+        remainingAmount,
+        alreadyAllocatedThisPeriod: new Prisma.Decimal(0),
+        allocationRequired: new Prisma.Decimal(0),
+      };
+    }
 
-    const currentPeriodStart = cycleStartedAt
-      .startOf('month')
-      .add(monthsSinceCycleStart, 'month');
-
-    const currentPeriodEnd = currentPeriodStart.add(1, 'month');
+    const currentPeriodStart = cycleStartedAt.isAfter(allocationDay)
+      ? cycleStartedAt
+      : allocationDay;
+    const currentPeriodEnd = allocationDay.add(1, 'month');
 
     const deposits = await tx.sinkingFundDeposit.aggregate({
       where: {
