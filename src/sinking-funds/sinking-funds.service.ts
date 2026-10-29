@@ -12,17 +12,13 @@ import { getRemainingDuration } from '../utils/date-duration';
 import { CreateSinkingFundDto } from './dto/create-sinking-fund.dto';
 import { UpdateSinkingFundDto } from './dto/update-sinking-fund.dto';
 import { CreateSinkingFundDepositDto } from './dto/create-sinking-fund-deposit.dto';
-import { AllocationService } from '../allocation/allocation.service';
 import { EXPENSE_FREQUENCY_MONTHS } from '../recurring-expense/constants/expense-frequency.constants';
 
 dayjs.extend(isSameOrAfter);
 
 @Injectable()
 export class SinkingFundService {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly allocationService: AllocationService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async create(userId: string, dto: CreateSinkingFundDto) {
     const book = await this.prisma.book.findFirst({
@@ -60,7 +56,6 @@ export class SinkingFundService {
           category: { select: { id: true, name: true } },
         },
       });
-      await this.allocationService.reconcileBook(tx, dto.bookId);
       return created;
     });
 

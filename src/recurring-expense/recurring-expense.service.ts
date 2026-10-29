@@ -96,9 +96,6 @@ export class RecurringExpenseService {
             },
           });
         }
-
-        await this.allocationService.reconcileBook(tx, dto.bookId);
-
         return recurringExpense.id;
       },
     );
@@ -308,6 +305,7 @@ export class RecurringExpenseService {
         });
 
         const updatedFrequency = dto.frequency ?? expense.frequency;
+        let createdSinkingFund = false;
 
         if (updatedFrequency === 'MONTHLY' && expense.sinkingFund) {
           await tx.sinkingFund.update({
@@ -352,9 +350,12 @@ export class RecurringExpenseService {
               recurringExpenseId: updated.id,
             },
           });
+          createdSinkingFund = true;
         }
 
-        await this.allocationService.reconcileBook(tx, expense.bookId);
+        if (!createdSinkingFund) {
+          await this.allocationService.reconcileBook(tx, expense.bookId);
+        }
 
         return updated.id;
       },
