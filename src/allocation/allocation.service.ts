@@ -294,14 +294,22 @@ export class AllocationService {
             date: allocationDate,
             categoryId: '21810011-c156-4f60-a772-768abd6e7566',
             paymentMethodId: 'a70e896c-f9a2-43b8-91c8-2fc537a264f2',
+            emergencyFundId: emergencyFund.id,
           },
         });
 
         if (sourceTransactionId) {
-          await tx.transaction.update({
+          const sourceTransaction = await tx.transaction.update({
             where: { id: sourceTransactionId },
             data: { amount: { decrement: emergencyAllocation } },
+            select: { amount: true },
           });
+
+          if (new Prisma.Decimal(sourceTransaction.amount).isZero()) {
+            await tx.transaction.delete({
+              where: { id: sourceTransactionId },
+            });
+          }
         }
 
         remaining = remaining.minus(emergencyAllocation);
