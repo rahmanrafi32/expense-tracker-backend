@@ -47,35 +47,7 @@ export class AllocationService {
       };
     }
 
-    if (!fund.recurringExpense) {
-      return {
-        remainingAmount,
-        normalMonthlyAmount: new Prisma.Decimal(0),
-        requiredMonthlyAmount: new Prisma.Decimal(0),
-        alreadyAllocatedThisPeriod: new Prisma.Decimal(0),
-        allocationRequired: new Prisma.Decimal(0),
-      };
-    }
-
-    const frequencyMonths =
-      EXPENSE_FREQUENCY_MONTHS[fund.recurringExpense.frequency];
-
-    if (!frequencyMonths || frequencyMonths <= 0) {
-      return {
-        remainingAmount,
-        normalMonthlyAmount: new Prisma.Decimal(0),
-        requiredMonthlyAmount: new Prisma.Decimal(0),
-        alreadyAllocatedThisPeriod: new Prisma.Decimal(0),
-        allocationRequired: new Prisma.Decimal(0),
-      };
-    }
-
-    const normalMonthlyAmount = targetAmount
-      .div(frequencyMonths)
-      .toDecimalPlaces(2);
-
     const allocationDay = dayjs(allocationDate).startOf('month');
-    const deadlineDay = dayjs(fund.deadline).startOf('month');
     const cycleStartedAt = dayjs(fund.cycleStartedAt ?? fund.createdAt);
 
     if (dayjs(allocationDate).isBefore(cycleStartedAt)) {
@@ -84,6 +56,36 @@ export class AllocationService {
         alreadyAllocatedThisPeriod: new Prisma.Decimal(0),
         allocationRequired: new Prisma.Decimal(0),
       };
+    }
+
+    let monthlyCapacity: Prisma.Decimal;
+
+    if (fund.recurringExpense) {
+      const frequencyMonths =
+        EXPENSE_FREQUENCY_MONTHS[fund.recurringExpense.frequency];
+
+      if (!frequencyMonths || frequencyMonths <= 0) {
+        return {
+          remainingAmount,
+          alreadyAllocatedThisPeriod: new Prisma.Decimal(0),
+          allocationRequired: new Prisma.Decimal(0),
+        };
+      }
+
+      monthlyCapacity = Prisma.Decimal.min(
+        targetAmount.div(frequencyMonths).toDecimalPlaces(2),
+        remainingAmount,
+      );
+    } else {
+      const monthsRemaining = dayjs(fund.deadline)
+        .startOf('day')
+        .diff(dayjs(allocationDate).startOf('day'), 'month', true);
+      monthlyCapacity =
+        monthsRemaining < 1
+          ? remainingAmount
+          : remainingAmount
+              .div(new Prisma.Decimal(monthsRemaining))
+              .toDecimalPlaces(2);
     }
 
     const currentPeriodStart = cycleStartedAt.isAfter(allocationDay)
@@ -107,9 +109,6 @@ export class AllocationService {
     const alreadyAllocatedThisPeriod =
       deposits._sum.amount ?? new Prisma.Decimal(0);
 
-    const monthlyCapacity = deadlineDay.isAfter(allocationDay, 'month')
-      ? Prisma.Decimal.min(normalMonthlyAmount, remainingAmount)
-      : remainingAmount;
     const allocationRequired = Prisma.Decimal.max(
       monthlyCapacity.minus(alreadyAllocatedThisPeriod),
       new Prisma.Decimal(0),
@@ -528,15 +527,12 @@ export class AllocationService {
         new Prisma.Decimal(current.targetAmount).minus(current.savedAmount),
         new Prisma.Decimal(0),
       );
-      const requirement = fund.recurringExpense
-        ? await this.calculateSinkingFundRequirement(
-            tx,
-            { ...fund, savedAmount: current.savedAmount },
-            allocationDate,
-          )
-        : null;
-      const scheduledContribution =
-        requirement?.allocationRequired ?? remainingTarget;
+      const requirement = await this.calculateSinkingFundRequirement(
+        tx,
+        { ...fund, savedAmount: current.savedAmount },
+        allocationDate,
+      );
+      const scheduledContribution = requirement.allocationRequired;
       const allocationAmount = Prisma.Decimal.min(
         availableAmount,
         remainingTarget,
@@ -544,7 +540,6 @@ export class AllocationService {
       );
 
       if (
-        fund.recurringExpense &&
         allocationAmount.lt(scheduledContribution) &&
         allocationAmount.lt(remainingTarget)
       ) {
