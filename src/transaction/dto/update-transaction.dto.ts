@@ -1,5 +1,6 @@
 import {
   IsDateString,
+  IsBoolean,
   IsDecimal,
   IsEnum,
   IsOptional,
@@ -10,6 +11,15 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { TransactionType } from '../enums/transaction-type.enum';
 
 export class UpdateTransactionDto {
+  @ApiPropertyOptional({
+    example: false,
+    description:
+      'Indicates whether the transaction should be automatically allocated to a category based on its remark. If true, the system will attempt to match the remark with existing categories and allocate accordingly. If false, the transaction will not be auto-allocated.',
+  })
+  @IsOptional()
+  @IsBoolean({ message: 'Auto allocate must be a boolean value' })
+  autoAllocate?: boolean;
+
   @IsOptional()
   @ApiProperty({ example: 'INCOME', enum: TransactionType, required: false })
   @IsEnum(TransactionType, {
