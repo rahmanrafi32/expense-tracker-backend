@@ -1,0 +1,48 @@
+enum LoanDirection {
+  LENT
+  BORROWED
+}
+
+model Loan {
+  id                 String          @id @default(uuid())
+  bookId             String
+  book               Book            @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  direction          LoanDirection
+  personName         String          @db.VarChar(200)
+  principal          Decimal         @db.Decimal(14, 2)
+  date               DateTime        @db.Date
+  expectedPayoffDate DateTime        @db.Date
+  notes              String?
+  repayments         LoanRepayment[]
+  transactions       Transaction[]
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  @@index([bookId, expectedPayoffDate])
+}
+
+model LoanRepayment {
+  id            String      @id @default(uuid())
+  loanId        String
+  loan          Loan        @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  amount        Decimal     @db.Decimal(14, 2)
+  date          DateTime    @db.Date
+  notes         String?
+  transactionId String      @unique
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  createdAt     DateTime    @default(now())
+
+  @@index([loanId, date])
+}
+
+model AllocationConsumption {
+  id            String          @id @default(uuid())
+  transactionId String
+  transaction   Transaction     @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  batchId       String
+  batch         AllocationBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  amount        Decimal         @db.Decimal(14, 2)
+
+  @@index([transactionId])
+  @@index([batchId])
+}

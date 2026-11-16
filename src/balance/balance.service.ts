@@ -11,6 +11,11 @@ export class BalanceService {
     tx: Prisma.TransactionClient,
     bookId: string,
   ): Promise<void> {
+    // Lock before reading the ledger so a concurrent cash movement cannot
+    // overwrite the book with a balance calculated before it committed.
+    await tx.$queryRaw(
+      Prisma.sql`SELECT "id" FROM "Book" WHERE "id" = ${bookId} FOR NO KEY UPDATE`,
+    );
     const { balance } = await this.getBookBalanceWithTx(tx, bookId);
 
     await tx.book.update({
@@ -25,7 +30,11 @@ export class BalanceService {
   async getBookBalanceWithTx(
     tx: Prisma.TransactionClient,
     bookId: string,
-  ): Promise<{ balance: number; totalCashIn: number; totalCashOut: number }> {
+  ): Promise<{
+    balance: Prisma.Decimal;
+    totalCashIn: Prisma.Decimal;
+    totalCashOut: Prisma.Decimal;
+  }> {
     const transactions = await tx.transaction.findMany({
       where: { bookId },
       select: {
@@ -36,13 +45,13 @@ export class BalanceService {
 
     const totalCashIn = transactions
       .filter((t) => t.type === TransactionType.INCOME)
-      .reduce((sum, t) => sum + new Prisma.Decimal(t.amount).toNumber(), 0);
+      .reduce((sum, t) => sum.plus(t.amount), new Prisma.Decimal(0));
 
     const totalCashOut = transactions
       .filter((t) => t.type === TransactionType.EXPENSE)
-      .reduce((sum, t) => sum + new Prisma.Decimal(t.amount).toNumber(), 0);
+      .reduce((sum, t) => sum.plus(t.amount), new Prisma.Decimal(0));
 
-    const balance = totalCashIn - totalCashOut;
+    const balance = totalCashIn.minus(totalCashOut);
 
     return {
       balance,

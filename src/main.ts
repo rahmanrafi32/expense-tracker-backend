@@ -1,3 +1,4 @@
+import { LoansModule } from './loans/loans.module';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { UserModule } from './user/user.module';
@@ -82,6 +83,7 @@ async function bootstrap() {
     .setTitle('Expense Tracker API')
     .setDescription('API documentation for the Expense Tracker backend')
     .setVersion('1.0')
+    .addCookieAuth('access_token')
     .addBearerAuth(
       { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
       'jwt',
@@ -97,6 +99,7 @@ async function bootstrap() {
       TransactionModule,
       CategoryModule,
       PaymentMethodModule,
+      LoansModule,
     ],
   });
   SwaggerModule.setup('api/docs', app, document);

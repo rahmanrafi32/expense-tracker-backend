@@ -33,6 +33,7 @@ export class SpendingTrendsService {
     const transactions = await this.prisma.transaction.findMany({
       where: {
         bookId,
+        loanId: null,
         date: {
           gte: startDate.toDate(),
           lt: endDate.toDate(),

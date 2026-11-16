@@ -1,6 +1,6 @@
 # Expense Tracker Backend
 
-REST API for personal budgeting, transaction tracking, recurring bills, savings goals, emergency funds, sinking funds, cash-flow forecasting, and financial insights.
+REST API for personal budgeting, transaction tracking, recurring bills, savings goals, emergency funds, sinking funds, loans, cash-flow forecasting, and financial insights.
 
 Built with NestJS, TypeScript, PostgreSQL, and Prisma. The API is organized around a user's financial **books**: each book represents a budget, account, or spending plan with its own currency, balance, income, expenses, and planning features.
 
@@ -17,6 +17,7 @@ Built with NestJS, TypeScript, PostgreSQL, and Prisma. The API is organized arou
 - Recurring expenses with due dates, normalized monthly costs, and automatic payment posting
 - Savings goals and sinking funds with deposits and progress metrics
 - Emergency-fund withdrawals, repayments, linked transactions, and summaries
+- Loans lent and borrowed, partial repayments, payoff dates, and overdue summaries
 - Projected cash-flow timelines with shortfall detection
 - Monthly dashboards and yearly financial insights
 - Spending-trend analysis and protected daily recurring-payment reminders
@@ -182,7 +183,7 @@ Passwords are never returned. User deletion cascades related books, tokens, cate
 
 ## Books API
 
-Books are the parent resource for transactions and most planning features. `bookTotalAmount` is calculated as total income minus total expenses.
+Books are the parent resource for transactions and most planning features. `bookTotalAmount` is calculated from all cash-in transactions minus all cash-out transactions, including loan movements. Ordinary income/spending reports exclude loan principal.
 
 | Method | Endpoint | Description |
 | --- | --- | --- |
@@ -337,6 +338,53 @@ Create body:
 
 Types are `WITHDRAWAL` and `REPAYMENT`. Withdrawals create linked `EXPENSE` transactions; repayments create linked `INCOME` transactions. Repayment amounts cannot exceed the outstanding amount. Default page size is `20`.
 
+## Loan management
+
+Apply the new migration before using the loan endpoints:
+
+```bash
+yarn prisma migrate deploy
+yarn prisma generate
+```
+
+Loan endpoints require the existing `access_token` authentication cookie and are documented at `/api/docs`.
+
+| Method | Route | Purpose |
+| --- | --- | --- |
+| POST | `/loans` | Record a new loan and its initial cash movement |
+| GET | `/loans?bookId=<uuid>` | List loans; optional `direction`, `status`, `search`, `offset`, `limit` |
+| GET | `/loans/summary?bookId=<uuid>` | Outstanding and overdue receivables/payables |
+| GET | `/loans/:id` | Loan details and repayment history |
+| PATCH | `/loans/:id` | Edit `personName`, `notes`, or `expectedPayoffDate` |
+| DELETE | `/loans/:id` | Reverse a mistaken loan with no repayments |
+| POST | `/loans/:id/repayments` | Record a partial or full repayment |
+| DELETE | `/loans/:id/repayments/:repaymentId` | Reverse a mistaken repayment |
+
+Example `POST /loans` body:
+
+```json
+{
+  "bookId": "00000000-0000-4000-8000-000000000001",
+  "direction": "LENT",
+  "personName": "Alex",
+  "amount": "1000.00",
+  "date": "2026-11-16",
+  "expectedPayoffDate": "2026-12-16",
+  "paymentMethodId": "00000000-0000-4000-8000-000000000002",
+  "notes": "Short-term personal loan"
+}
+```
+
+`LENT` means money you gave someone; `BORROWED` means money you received from someone. A repayment body contains `amount`, `date`, `paymentMethodId`, and optional `notes`. Amount inputs are decimal strings with up to two decimal places. Loan responses expose the original amount as `principal`, plus `repaidAmount` and `outstandingAmount`. Decimal response amounts are JSON strings; clients must format them as money and keep submitted amounts as strings. Currency comes from the book. Dates use `YYYY-MM-DD`; actual cash movements cannot be future dated. Due/overdue flags use the server's current calendar day.
+
+Status is `OPEN`, `PARTIALLY_REPAID`, or `SETTLED`, with separate `isDueToday` and `isOverdue` flags. List responses contain `data`, `total`, and `nextOffset`. Summary amounts remain separate as `outstandingReceivables`, `outstandingPayables`, `overdueReceivables`, and `overduePayables`. List defaults are `offset=0` and `limit=20` (maximum `100`); `search` matches the person name. Send only fields accepted by the DTO; financial fields cannot be patched.
+
+Loan transactions affect book and historical balances and appear in transaction history with loan metadata. They are excluded from normal income, spending, savings, and spending trends. Monthly overviews expose `loanCashIn` and `loanCashOut` alongside cash balances. Incoming loan cash is not automatically allocated; outgoing payments consume unallocated cash, restored to its original batches on reversal. Correct these transactions through loan endpoints.
+
+Cash-flow forecasts include the remaining balance on the expected payoff date. Overdue and due-today amounts appear once on the next projection day. Forecasts never post payments. This version has no interest, installment schedules, opening balances for existing loans, or email reminders.
+
+Unit tests run with `yarn test --runInBand`. PostgreSQL concurrency, rollback, and cascade tests are opt-in: set `LOAN_TEST_DATABASE_URL` to a disposable PostgreSQL test database and run `yarn test loans.integration --runInBand`. The tests create and drop a uniquely named schema; the database role needs schema-creation permissions. They do not use `DATABASE_URL` for connections.
+
 ## Allocation API
 
 | Method | Endpoint | Description |
@@ -345,7 +393,9 @@ Types are `WITHDRAWAL` and `REPAYMENT`. Withdrawals create linked `EXPENSE` tran
 | `GET` | `/allocations?bookId=<bookId>` | List allocation batches for a book |
 | `GET` | `/allocations/:id` | Get allocation details |
 
-Income transactions invoke allocation automatically. The priority is emergency
+Ordinary income uses the `autoAllocate` setting (default true for escrow books
+and false for operating books); incoming loan cash never invokes allocation.
+The priority is emergency
 repayment, recurring-expense sinking funds, and then goals. Recurring funds
 receive only the amount required for the current period. Any remainder is
 recorded as unallocated; an ordinary expense consumes unallocated amounts
@@ -385,7 +435,7 @@ List responses include `progressPct`, `remaining`, `monthlyNeeded`, `monthsLeft`
 | --- | --- | --- |
 | `GET` | `/cash-flow?bookId=<bookId>&days=<days>` | Project a daily cash-flow timeline |
 
-`days` defaults to `90` and must be between `30` and `365`. Projections start from the balance represented by transactions through today, then consider future-dated transactions, recurring bills, unfunded sinking-fund deadlines, and average ordinary spending. Income defaults to the average of the three prior completed calendar months (including zero-income months); a planned income transaction replaces that estimate for its month. Books with no income history fall back to their configured monthly income. Each item contains `date`, `balance`, and `isShortfall`.
+`days` defaults to `90` and must be between `30` and `365`. Projections start from the balance represented by transactions through today, then consider future-dated transactions, outstanding loan payoff dates, recurring bills, unfunded sinking-fund deadlines, and average ordinary spending. Income defaults to the average of the three prior completed calendar months (including zero-income months); a planned income transaction replaces that estimate for its month. Books with no income history fall back to their configured monthly income. Each item contains `date`, `balance`, and `isShortfall`.
 
 ## Spending trends API
 
@@ -410,7 +460,7 @@ and sends reminder emails through Resend using `CRON_SECRET` for authorization.
 
 The monthly dashboard combines overview, category breakdown, fixed-vs-variable expenses, payment-method distribution, and the top five expense transactions. `month` must be between `1` and `12`.
 
-> The insights controller currently has no JWT guard in source, so these routes are public by implementation. Add a guard before exposing them to untrusted clients if this is not intentional.
+Insights routes require the access-token cookie and validate book ownership.
 
 ## Swagger and API discovery
 
@@ -437,6 +487,7 @@ src/
 ├── goals/                Savings goals and deposits
 ├── emergency-funds/      Emergency borrowing and repayment
 ├── sinking-funds/        Planned future-expense savings
+├── loans/                Lending, borrowing, repayment history, and summaries
 ├── cash-flow/            Projected daily cash-flow timeline
 ├── insights/             Monthly and yearly analytics
 ├── spending-trends/      Spending comparisons and trends
