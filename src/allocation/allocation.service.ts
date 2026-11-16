@@ -463,6 +463,7 @@ export class AllocationService {
     tx: Prisma.TransactionClient,
     bookId: string,
     amount: Prisma.Decimal,
+    transactionId?: string,
   ) {
     if (amount.lte(0)) {
       return;
@@ -490,6 +491,11 @@ export class AllocationService {
         data: { unallocatedAmount: { decrement: consumed } },
       });
 
+      if (transactionId) {
+        await tx.allocationConsumption.create({
+          data: { transactionId, batchId: batch.id, amount: consumed },
+        });
+      }
       remaining = remaining.minus(consumed);
     }
   }

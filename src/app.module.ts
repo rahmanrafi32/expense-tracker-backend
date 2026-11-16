@@ -1,3 +1,4 @@
+import { LoansModule } from './loans/loans.module';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { UserModule } from './user/user.module';
@@ -29,6 +30,7 @@ import { HealthController } from './health/health.controller';
     UserModule,
     AuthModule,
     BookModule,
+    LoansModule,
     TransactionModule,
     CategoryModule,
     PaymentMethodModule,

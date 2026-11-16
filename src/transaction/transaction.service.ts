@@ -272,11 +272,13 @@ export class TransactionService {
         include: {
           category: { select: { id: true, name: true } },
           paymentMethod: { select: { id: true, name: true } },
+          loan: { select: { id: true, personName: true, direction: true } },
+          loanRepayment: { select: { id: true } },
         },
       }),
       this.prisma.transaction.groupBy({
         by: ['type'],
-        where,
+        where: { ...where, loanId: null },
         orderBy: { type: 'asc' },
         _sum: { amount: true },
       }),
@@ -313,6 +315,8 @@ export class TransactionService {
       where: { id, book: { userId } },
 
       include: {
+        loan: { select: { id: true, personName: true, direction: true } },
+        loanRepayment: { select: { id: true } },
         category: {
           select: {
             id: true,
@@ -348,6 +352,12 @@ export class TransactionService {
 
     if (!existingTransaction) {
       throw new NotFoundException(`Transaction with id ${id} not found`);
+    }
+
+    if (existingTransaction.loanId) {
+      throw new BadRequestException(
+        'Use loan endpoints to correct loan transactions',
+      );
     }
 
     if (
@@ -466,6 +476,11 @@ export class TransactionService {
 
   async remove(userId: string, id: string): Promise<Transaction> {
     const transaction = await this.findOne(userId, id);
+    if (transaction.loanId) {
+      throw new BadRequestException(
+        'Use loan endpoints to delete loan transactions',
+      );
+    }
     return this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const deletedTransaction = await tx.transaction.delete({
         where: { id },

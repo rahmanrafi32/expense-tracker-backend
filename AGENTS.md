@@ -7,7 +7,7 @@ rules take precedence over general defaults.
 
 - Name: `expense-tracker-backend`
 - Purpose: NestJS REST API for budgeting, transactions, recurring expenses,
-  savings goals, emergency funds, sinking funds, cash-flow forecasts, and
+  savings goals, emergency funds, sinking funds, loans, cash-flow forecasts, and
   financial insights.
 - Stack: TypeScript, NestJS 11, Prisma 7, PostgreSQL 16, and the Prisma
   PostgreSQL driver adapter (`@prisma/adapter-pg` over `pg`).
@@ -56,7 +56,7 @@ use `// @ts-ignore` or an eslint-disable comment to hide an underlying issue.
 ## Feature map
 
 The API is book-scoped: a book owns the balance, transactions, recurring
-expenses, goals, emergency-fund activity, sinking funds, allocations, and
+expenses, goals, emergency-fund activity, sinking funds, loans, allocations, and
 analytics below.
 
 - **Authentication and users** — Signup, login, HTTP-only cookie-based JWT
@@ -78,6 +78,10 @@ analytics below.
   expenses with deposits, progress metrics, and automatic allocation.
 - **Emergency funds** — Withdrawals, repayments, outstanding summaries, and
   linked transactions.
+- **Loans** — Money lent or borrowed, named counterparties, partial repayments,
+  expected payoff dates, due/overdue flags, summaries, and cash-flow forecasts.
+  Loan principal changes cash balances but is excluded from ordinary income,
+  spending, savings, and spending trends.
 - **Cash flow and analytics** — Daily projections with shortfall detection,
   spending trends, monthly dashboards, category/payment-method breakdowns,
   and yearly trends.
@@ -105,6 +109,7 @@ analytics below.
 | `src/goals/` | Savings goals and deposits |
 | `src/emergency-funds/` | Emergency-fund entries, withdrawals, repayments, and summaries |
 | `src/sinking-funds/` | Sinking funds and deposits |
+| `src/loans/` | Book-scoped loans, repayments, reversals, summaries, and DTOs |
 | `src/email-notification/` | Password-reset email delivery through Resend |
 | `src/database/` | Global Prisma service and database module |
 | `src/prisma/` | Prisma schema fragments, `schema.prisma`, and migrations |
@@ -113,7 +118,7 @@ analytics below.
 | `src/cloudinary/` | Profile-image upload integration |
 | `src/notification/` | Recurring-payment reminders and notification logs |
 | `src/cron/` | Protected daily notification trigger |
-| `**/*.spec.ts` | Colocated unit tests; none are currently present |
+| `**/*.spec.ts` | Colocated unit tests and opt-in loan PostgreSQL integration tests |
 | `test/` | Intended e2e test location; currently absent |
 | `docker-compose.yml` | Local PostgreSQL 16 service and persistent volume |
 | `prisma.config.ts` | Prisma 7 schema, datasource, and migration-path configuration |
@@ -160,6 +165,50 @@ analytics below.
 - Keep income allocation and unallocated-cash consumption in the same Prisma
   transaction as the source transaction, so spent cash cannot be reconciled
   later.
+
+## Loan management rules
+
+- Keep `LENT` (money given to someone) and `BORROWED` (money received) distinct.
+  A loan belongs to one book and uses that book's currency. There is no separate
+  contact catalog, interest, installment schedule, or opening-balance mode.
+- `POST /loans` records a new principal and posts its actual cash movement.
+  Repayments are manual entries through `/loans/:id/repayments`; due dates
+  never create payments. Amount inputs are positive decimal strings with at
+  most two decimal places. Dates are `YYYY-MM-DD`; reject invalid calendar
+  dates, future actual payments, repayments before origination, payoff dates
+  before origination, and overpayments.
+- Derive outstanding amounts and `OPEN`, `PARTIALLY_REPAID`, or `SETTLED`
+  status from repayments. Due-today/overdue are separate flags, evaluated by
+  server calendar day. Expected dates remain editable after partial payments.
+- Loan transactions keep `INCOME`/`EXPENSE` cash direction and a `loanId`.
+  Include them in book/historical cash balances and transaction history, but
+  exclude them from ordinary income/expense totals, savings, spending trends,
+  and expense breakdowns. Monthly cash totals expose `loanCashIn`/`loanCashOut`.
+- Lending and repaying borrowed money consume unallocated cash oldest-first;
+  record the consumed batches in `AllocationConsumption`. Reversals restore
+  exactly those batches without automatically reallocating. Incoming loan
+  cash never triggers automatic allocation or creates allocation batches.
+- Keep loan, repayment, linked transaction, consumption/reversal, and balance
+  writes in one Prisma transaction. Acquire the book's `FOR NO KEY UPDATE`
+  lock before reading repayment totals for mutations; re-read the loan after
+  locking so concurrent payments/deletions cannot overpay or race.
+- Reject direct updates/deletions of loan transactions through transaction
+  endpoints. Only person name, notes, and expected payoff date can be edited;
+  financial corrections require reversing repayments or deleting a loan with
+  no remaining repayment records. Preserve book-deletion cascades.
+- Forecast the remaining principal once on its payoff date (incoming for
+  `LENT`, outgoing for `BORROWED`); place overdue/due-today balances on the next
+  projection day. Settled loans add no projection. Loan receipts do not replace
+  estimated salary or change ordinary-spending averages.
+- Keep the LoansModule registered in both AppModule and Swagger's explicit
+  module list. Preserve cookie authentication and ownership checks on every
+  loan, repayment, and referenced payment method.
+- Before deployment, apply the loan migration with `yarn prisma migrate deploy`
+  and generate the client. Run `yarn test --runInBand` for unit coverage.
+  PostgreSQL tests require an explicit disposable `LOAN_TEST_DATABASE_URL` and
+  `yarn test loans.integration --runInBand`; they create/drop an isolated
+  schema and must never fall back to `DATABASE_URL` for connections. Report
+  skipped integration tests honestly when no test database is available.
 
 ## Git conventions
 

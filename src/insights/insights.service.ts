@@ -30,15 +30,28 @@ export class InsightsService {
     await this.ensureBookOwnership(userId, dto.bookId);
     const { startDate, endDate } = this.getMonthDateRange(dto.month, dto.year);
 
-    const [totals, openingTotals] = await Promise.all([
+    const [totals, openingTotals, loanTotals] = await Promise.all([
       this.prisma.transaction.groupBy({
         by: ['type'],
-        where: { bookId: dto.bookId, date: { gte: startDate, lt: endDate } },
+        where: {
+          bookId: dto.bookId,
+          loanId: null,
+          date: { gte: startDate, lt: endDate },
+        },
         _sum: { amount: true },
       }),
       this.prisma.transaction.groupBy({
         by: ['type'],
         where: { bookId: dto.bookId, date: { lt: startDate } },
+        _sum: { amount: true },
+      }),
+      this.prisma.transaction.groupBy({
+        by: ['type'],
+        where: {
+          bookId: dto.bookId,
+          loanId: { not: null },
+          date: { gte: startDate, lt: endDate },
+        },
         _sum: { amount: true },
       }),
     ]);
@@ -58,8 +71,16 @@ export class InsightsService {
         .amount ?? 0,
     ).toNumber();
     const openingBalance = openingIncome - openingExpense;
-    const availableCash = openingBalance + totalIncome;
-    const closingBalance = availableCash - totalExpense;
+    const loanCashIn = new Prisma.Decimal(
+      loanTotals.find((t) => t.type === TransactionType.INCOME)?._sum.amount ??
+        0,
+    ).toNumber();
+    const loanCashOut = new Prisma.Decimal(
+      loanTotals.find((t) => t.type === TransactionType.EXPENSE)?._sum.amount ??
+        0,
+    ).toNumber();
+    const availableCash = openingBalance + totalIncome + loanCashIn;
+    const closingBalance = availableCash - totalExpense - loanCashOut;
     const cashShortfall = Math.max(0, -closingBalance);
     const netSavings = totalIncome - totalExpense;
     const savingsRate = totalIncome > 0 ? (netSavings / totalIncome) * 100 : 0;
@@ -67,6 +88,8 @@ export class InsightsService {
     return {
       totalIncome,
       totalExpense,
+      loanCashIn,
+      loanCashOut,
       netSavings,
       savingsRate: Math.round(savingsRate * 100) / 100,
       openingBalance: Math.round(openingBalance * 100) / 100,
@@ -84,6 +107,7 @@ export class InsightsService {
       by: ['categoryId'],
       where: {
         bookId: dto.bookId,
+        loanId: null,
         type: TransactionType.EXPENSE,
         date: { gte: startDate, lt: endDate },
       },
@@ -137,7 +161,11 @@ export class InsightsService {
       .toDate();
 
     const transactions = await this.prisma.transaction.findMany({
-      where: { bookId: dto.bookId, date: { gte: startDate, lt: endDate } },
+      where: {
+        bookId: dto.bookId,
+        loanId: null,
+        date: { gte: startDate, lt: endDate },
+      },
       select: { type: true, amount: true, date: true },
     });
 
@@ -176,6 +204,7 @@ export class InsightsService {
     const transactions = await this.prisma.transaction.findMany({
       where: {
         bookId: dto.bookId,
+        loanId: null,
         type: TransactionType.EXPENSE,
         date: { gte: startDate, lt: endDate },
       },
@@ -207,6 +236,7 @@ export class InsightsService {
       by: ['paymentMethodId'],
       where: {
         bookId: dto.bookId,
+        loanId: null,
         type: TransactionType.EXPENSE,
         date: { gte: startDate, lt: endDate },
       },
@@ -250,6 +280,7 @@ export class InsightsService {
     return this.prisma.transaction.findMany({
       where: {
         bookId: dto.bookId,
+        loanId: null,
         type: TransactionType.EXPENSE,
         date: { gte: startDate, lt: endDate },
       },

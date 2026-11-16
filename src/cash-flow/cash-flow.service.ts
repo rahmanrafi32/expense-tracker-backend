@@ -1,3 +1,4 @@
+import { loanProgress } from '../loans/loans.service';
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, TransactionType } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
@@ -50,6 +51,7 @@ export class CashFlowService {
       futureTransactions,
       recurringBills,
       sinkingFunds,
+      loans,
     ] = await Promise.all([
       this.spendingTrendsService.getSpendingTrendForBook(dto.bookId),
       this.prisma.transaction.groupBy({
@@ -68,7 +70,7 @@ export class CashFlowService {
             lte: endDate.endOf('day').toDate(),
           },
         },
-        select: { type: true, amount: true, date: true },
+        select: { type: true, amount: true, date: true, loanId: true },
       }),
       this.prisma.reccuringExpenses.findMany({
         where: {
@@ -85,6 +87,13 @@ export class CashFlowService {
           },
           savedAmount: { lt: this.prisma.sinkingFund.fields.targetAmount },
         },
+      }),
+      this.prisma.loan.findMany({
+        where: {
+          bookId: dto.bookId,
+          expectedPayoffDate: { lte: endDate.endOf('day').toDate() },
+        },
+        include: { repayments: true },
       }),
     ]);
 
@@ -107,9 +116,24 @@ export class CashFlowService {
         transaction.type === TransactionType.INCOME ? amount : amount.negated();
 
       this.addEvent(transactionEvents, transactionDate, signedAmount);
-      if (transaction.type === TransactionType.INCOME) {
+      if (transaction.type === TransactionType.INCOME && !transaction.loanId) {
         incomeMonthsWithPlans.add(transactionDate.format('YYYY-MM'));
       }
+    }
+
+    for (const loan of loans.map(loanProgress)) {
+      if (loan.outstandingAmount.lte(0)) continue;
+      const dueDay = dayjs(loan.expectedPayoffDate.toISOString().slice(0, 10));
+      const eventDate = dueDay.isBefore(projectionStartDate, 'day')
+        ? projectionStartDate
+        : dueDay;
+      this.addEvent(
+        transactionEvents,
+        eventDate,
+        loan.direction === 'LENT'
+          ? loan.outstandingAmount
+          : loan.outstandingAmount.negated(),
+      );
     }
 
     const syntheticIncomeEvents = new Map<string, Prisma.Decimal>();
